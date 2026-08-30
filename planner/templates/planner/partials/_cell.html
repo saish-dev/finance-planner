@@ -1,0 +1,7 @@
+{% load money %}<td class="{% if cell.derived %}derived{% endif %} {% if cell.align_right %}num{% endif %}">
+  {% if cell.kind == 'money' %}{{ cell.value|inr }}
+  {% elif cell.kind == 'pct' %}{{ cell.value|pct }}
+  {% elif cell.kind == 'month' %}{{ cell.value|month_label }}
+  {% elif cell.kind == 'bool' %}{% if cell.value %}<span class="pill yes">Yes</span>{% else %}<span class="pill no">No</span>{% endif %}
+  {% else %}{{ cell.value|default_if_none:"&mdash;" }}{% endif %}
+</td>

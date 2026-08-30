@@ -1,0 +1,59 @@
+{% load money %}
+<section class="card table-card" id="table-{{ config.slug }}">
+  <div class="card-head">
+    <div>
+      <h2>{{ config.plural }}</h2>
+      {% if config.note %}<p class="note">{{ config.note }}</p>{% endif %}
+    </div>
+    <button class="btn primary"
+            hx-get="{% url 'row_new' config.slug %}"
+            hx-target="#new-slot-{{ config.slug }}"
+            hx-swap="innerHTML">{{ config.add_label }}</button>
+  </div>
+
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% for column in config.columns %}
+            <th class="{% if column.align_right %}num{% endif %} {% if column.derived %}derived{% endif %}">
+              {{ column.label }}{% if column.info %}{% info column.info %}{% endif %}{% if column.derived %}<span class="derived-flag" title="Worked out by the app from what you entered">derived</span>{% endif %}
+            </th>
+          {% endfor %}
+          <th class="actions-col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr id="row-{{ config.slug }}-{{ row.obj.pk }}">
+            {% for cell in row.cells %}{% include "planner/partials/_cell.html" %}{% endfor %}
+            <td class="row-actions">
+              {% if row.detail_url %}<a class="btn ghost" href="{{ row.detail_url }}">Schedule</a>{% endif %}
+              <button class="btn ghost"
+                      hx-get="{% url 'row_edit' config.slug row.obj.pk %}"
+                      hx-target="#row-{{ config.slug }}-{{ row.obj.pk }}"
+                      hx-swap="outerHTML">Edit</button>
+              <button class="btn ghost danger"
+                      hx-post="{% url 'row_delete' config.slug row.obj.pk %}"
+                      hx-target="#table-{{ config.slug }}"
+                      hx-swap="outerHTML"
+                      hx-confirm="Delete &ldquo;{{ row.obj }}&rdquo;? Projections recompute from scratch, so nothing else breaks.">Delete</button>
+            </td>
+          </tr>
+          {% if row.warnings %}
+            <tr class="note-row">
+              <td colspan="{{ config.columns|length|add:1 }}">
+                {% for warning in row.warnings %}<span class="row-note">{{ warning }}</span>{% endfor %}
+              </td>
+            </tr>
+          {% endif %}
+        {% empty %}
+          <tr>
+            <td class="empty" colspan="{{ config.columns|length|add:1 }}">{{ config.empty_message }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tbody id="new-slot-{{ config.slug }}"></tbody>
+    </table>
+  </div>
+</section>

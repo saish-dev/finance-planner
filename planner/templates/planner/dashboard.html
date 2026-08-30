@@ -1,0 +1,31 @@
+{% extends "planner/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+  <div class="page-head with-control">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="subtitle">
+        Projected from {{ planner.start_month|date:"M Y" }} to December of the year on the right.
+      </p>
+    </div>
+
+    {# The single most-used control in the app: change the year, everything below re-renders. #}
+    <label class="year-control">
+      <span>Project to year</span>
+      <input type="number" name="upto" value="{{ current_year }}" min="{{ planner.start_month.year }}"
+             max="{{ planner.max_year }}" step="1" class="input year-input"
+             hx-get="{% url 'dashboard_partial' %}"
+             hx-target="#dashboard-body"
+             hx-swap="innerHTML"
+             hx-trigger="change, keyup changed delay:500ms"
+             hx-indicator="#year-busy">
+      <span id="year-busy" class="htmx-indicator">recomputing&hellip;</span>
+    </label>
+  </div>
+
+  <div id="dashboard-body">
+    {% include "planner/partials/dashboard_body.html" %}
+  </div>
+{% endblock %}

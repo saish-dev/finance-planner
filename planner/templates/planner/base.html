@@ -1,0 +1,51 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ title|default:"Planner" }}{% endblock %} &middot; Cashflow Planner</title>
+  <link rel="stylesheet" href="{% static 'planner.css' %}">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  {% comment %}
+    Not deferred: the page bodies call renderPlannerCharts() from an inline
+    script during parsing, which a deferred file would not have defined yet.
+  {% endcomment %}
+  <script src="{% static 'charts.js' %}"></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <header class="topbar">
+    <a class="brand" href="{% url 'dashboard' %}">
+      <span class="brand-mark">&#8377;</span>
+      <span>Cashflow &amp; Net Worth Planner</span>
+    </a>
+    <nav>
+      <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
+      <a href="{% url 'cashflow' %}" class="{% if request.resolver_match.url_name == 'cashflow' %}active{% endif %}">Cashflow</a>
+      <a href="{% url 'summary' %}" class="{% if request.resolver_match.url_name == 'summary' %}active{% endif %}">Summary</a>
+      <span class="nav-sep"></span>
+      <a href="{% url 'income' %}" class="{% if page == 'income' %}active{% endif %}">Income</a>
+      <a href="{% url 'expenses' %}" class="{% if page == 'expenses' %}active{% endif %}">Expenses</a>
+      <a href="{% url 'loans' %}" class="{% if page == 'loans' %}active{% endif %}">Loans</a>
+      <a href="{% url 'investments' %}" class="{% if page == 'investments' %}active{% endif %}">Investments</a>
+      <a href="{% url 'retirement' %}" class="{% if page == 'retirement' %}active{% endif %}">Retirement</a>
+      <a href="{% url 'insurance' %}" class="{% if page == 'insurance' %}active{% endif %}">Insurance</a>
+      <span class="nav-sep"></span>
+      <a href="{% url 'settings' %}" class="{% if request.resolver_match.url_name == 'settings' %}active{% endif %}">Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}<div class="banner {{ message.tags }}">{{ message }}</div>{% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    Projections are recomputed from your current data on every page load &mdash; nothing is cached or stored.
+  </footer>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{% load money %}
+<tr id="form-row-{{ config.slug }}" class="form-row">
+  <td colspan="{{ config.columns|length|add:1 }}">
+    <form hx-post="{% if object %}{% url 'row_update' config.slug object.pk %}{% else %}{% url 'row_create' config.slug %}{% endif %}"
+          hx-target="#table-{{ config.slug }}"
+          hx-swap="outerHTML">
+      {% csrf_token %}
+      <h3 class="form-title">{% if object %}Edit {{ config.singular|lower }}{% else %}New {{ config.singular|lower }}{% endif %}</h3>
+
+      {% if form.non_field_errors %}
+        <div class="banner error">{% for error in form.non_field_errors %}{{ error }}{% endfor %}</div>
+      {% endif %}
+
+      <div class="form-grid">
+        {% for field in form %}
+          <label class="field {% if field.errors %}has-error{% endif %}">
+            <span class="field-label">{{ field.label }}</span>
+            {{ field }}
+            {% if field.help_text %}<span class="field-help">{{ field.help_text }}</span>{% endif %}
+            {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="form-actions">
+        <button class="btn primary" type="submit">Save</button>
+        <button class="btn ghost" type="button"
+                hx-get="{% url 'row_table' config.slug %}"
+                hx-target="#table-{{ config.slug }}"
+                hx-swap="outerHTML">Cancel</button>
+      </div>
+    </form>
+  </td>
+</tr>

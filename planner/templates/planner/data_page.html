@@ -1,0 +1,17 @@
+{% extends "planner/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <h1>{{ title }}</h1>
+    <p class="subtitle">
+      Everything here feeds the projection from
+      {{ planner.start_month|date:"M Y" }} onwards. Changes show up immediately on the dashboard.
+    </p>
+  </div>
+
+  {% for table in tables %}
+    {% include "planner/partials/table.html" with config=table.config rows=table.rows %}
+  {% endfor %}
+{% endblock %}

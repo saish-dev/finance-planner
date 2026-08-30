@@ -1,0 +1,100 @@
+{% extends "planner/base.html" %}
+{% load money %}
+
+{% block title %}Summary{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <h1>Year by year</h1>
+    <p class="subtitle">
+      The same projection as the cashflow page, rolled up per year. Balances are taken at each
+      year end; the flows are totals for the year. Under each balance is the part of it that is
+      growth rather than money you put in &mdash; measured from
+      {{ planner.start_month|date:"M Y" }}, so value you already held counts as capital.
+    </p>
+  </div>
+
+  {% for notice in horizon.notices %}<div class="banner warning">{{ notice }}</div>{% endfor %}
+
+  <div class="card toolbar">
+    <span class="toolbar-label">Outflow</span>
+    {% if show_breakdown %}
+      <a class="btn ghost" href="{% query_with request detail=None %}">Hide breakdown</a>
+      <span class="note">Showing living costs, insurance, EMIs and SIPs as separate columns.</span>
+    {% else %}
+      <a class="btn ghost" href="{% query_with request detail=1 %}">Show breakdown</a>
+      <span class="note">Living costs, insurance, EMIs and SIPs are combined into one Out column.</span>
+    {% endif %}
+  </div>
+
+  <section class="card">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th class="num">In{% info "Salary plus bonus for every month of the year, added up." %}</th>
+            {% if show_breakdown %}
+              <th class="num">Living{% info "Living expenses for the year. Inflating ones step up every 12 months from the projection start." %}</th>
+              <th class="num">Insurance{% info "Premiums actually charged during the year, in the months they fall due." %}</th>
+              <th class="num">EMIs{% info "Every loan's EMI, totalled across the year." %}</th>
+              <th class="num">SIPs{% info "All SIP contributions for the year, including each fund's own step-ups." %}</th>
+            {% endif %}
+            <th class="num">Out{% info "Living expenses + insurance + EMIs + SIPs for the year. PF contributions are excluded — your in-hand salary is already net of them." %}</th>
+            <th class="num">Surplus{% info "In minus Out for the year. Not the change in net worth: it excludes investment growth, loan principal repaid and PF." %}</th>
+            <th class="num">Bank{% info "Balance at the year end, held at the emergency-fund target once it is reached." %}</th>
+            <th class="num">Surplus pool{% info "Balance at the year end. Surplus swept off the bank cap, compounding at the pool rate." %}</th>
+            <th class="num">Investments{% info "Fund value at the year end: SIPs plus growth at the blended return. Swept surplus never lands here." %}</th>
+            <th class="num">PF corpus{% info "EPF balance at the year end, including employee and employer contributions plus interest." %}</th>
+            <th class="num">Loans left{% info "Principal still outstanding across every loan at the year end." %}</th>
+            <th class="num">Net worth{% info "Bank + pool + investments + PF, minus loans outstanding, at the year end." %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for year in years %}
+            <tr>
+              <td class="strong">{{ year.year }}{% if year.months < 12 %} <span class="pill no">{{ year.months }} mo</span>{% endif %}</td>
+              <td class="num">{{ year.inflow|inr }}</td>
+              {% if show_breakdown %}
+                <td class="num">{{ year.living_expenses|inr }}</td>
+                <td class="num">{{ year.insurance|inr }}</td>
+                <td class="num">{{ year.emi|inr }}</td>
+                <td class="num">{{ year.sip|inr }}</td>
+              {% endif %}
+              <td class="num">{{ year.outflow|inr }}</td>
+              <td class="num {{ year.surplus|net_class }}">{{ year.surplus|inr }}</td>
+              <td class="num">{{ year.bank_balance|inr }}</td>
+              {% comment %}
+                Balance on top, the growth portion of it underneath -- keeps
+                the split visible without six more columns to scroll past.
+              {% endcomment %}
+              <td class="num">{{ year.pool_balance|inr }}
+                {% if year.pool_gains %}<span class="sub-value">+{{ year.pool_gains|inr }} growth</span>{% endif %}</td>
+              <td class="num">{{ year.investment_balance|inr }}
+                {% if year.investment_gains %}<span class="sub-value {{ year.investment_gains|net_class }}">{% if year.investment_gains > 0 %}+{% endif %}{{ year.investment_gains|inr }} growth</span>{% endif %}</td>
+              <td class="num">{{ year.pf_balance|inr }}
+                {% if year.pf_gains %}<span class="sub-value">+{{ year.pf_gains|inr }} growth</span>{% endif %}</td>
+              <td class="num">{{ year.total_loan_balance|inr }}</td>
+              <td class="num strong {{ year.net_worth|net_class }}">{{ year.net_worth|inr }}</td>
+            </tr>
+          {% empty %}
+            <tr><td class="empty" colspan="14">Nothing to summarise yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="card chart-card">
+    <div class="card-head"><h2>Where your money sits, year by year</h2></div>
+    <div class="chart-holder"><canvas id="net-worth-chart"></canvas></div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-head"><h2>Annual net surplus</h2></div>
+    <div class="chart-holder"><canvas id="surplus-chart"></canvas></div>
+  </div>
+
+  <script id="chart-data" type="application/json">{{ chart_data|safe }}</script>
+  <script>renderPlannerCharts(JSON.parse(document.getElementById('chart-data').textContent));</script>
+{% endblock %}

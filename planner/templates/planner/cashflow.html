@@ -1,0 +1,152 @@
+{% extends "planner/base.html" %}
+{% load money %}
+
+{% block title %}Cashflow{% endblock %}
+
+{% block content %}
+  <div class="page-head with-control">
+    <div>
+      <h1>Cashflow</h1>
+      <p class="subtitle">
+        {{ total_rows }} month{{ total_rows|pluralize }} from {{ horizon.start_month|month_label }}
+        to December {{ horizon.end_year }}.
+      </p>
+    </div>
+    <div class="control-row">
+      <a class="btn primary" href="{% url 'cashflow_csv' %}?upto={{ horizon.end_year }}">Download CSV</a>
+    </div>
+  </div>
+
+  {% for notice in horizon.notices %}<div class="banner warning">{{ notice }}</div>{% endfor %}
+
+  {% comment %}
+    One GET form drives both the year filter and the column groups, so the
+    two never fight over the query string.
+  {% endcomment %}
+  <form method="get" class="card toolbar">
+    <input type="hidden" name="v" value="1">
+    {% if horizon.requested_year != planner.project_to_year %}
+      <input type="hidden" name="upto" value="{{ horizon.end_year }}">
+    {% endif %}
+
+    <label class="toolbar-field">
+      <span>Year</span>
+      <select name="year" class="select" onchange="this.form.submit()">
+        <option value="">All years</option>
+        {% for year in years %}
+          <option value="{{ year }}" {% if year_filter == year %}selected{% endif %}>{{ year }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div class="toolbar-groups">
+      <span class="toolbar-label">Columns</span>
+      <label class="toggle">
+        <input type="checkbox" name="cols" value="income" {% if show_income %}checked{% endif %}
+               onchange="this.form.submit()"> Income
+      </label>
+      <label class="toggle">
+        <input type="checkbox" name="cols" value="spending" {% if show_spending %}checked{% endif %}
+               onchange="this.form.submit()"> Spending
+      </label>
+      <label class="toggle">
+        <input type="checkbox" name="cols" value="balances" {% if show_balances %}checked{% endif %}
+               onchange="this.form.submit()"> Balances
+      </label>
+      <noscript><button class="btn" type="submit">Apply</button></noscript>
+    </div>
+  </form>
+
+  <section class="card">
+    <div class="table-scroll tall">
+      <table class="data-table cashflow">
+        <thead>
+          <tr>
+            <th class="sticky-col">Month</th>
+
+            {% if show_income %}
+              <th class="num">Salary{% info "The most recent salary change on or before this month. In years with no change entry, last month's salary grown by the default hike, applied only in the hike month." %}</th>
+              <th class="num">Bonus{% info "Any annual bonus or variable pay, charged in full in its payout month and zero in every other month." %}</th>
+            {% endif %}
+            <th class="num">In{% info "Total inflow for the month: salary plus any bonus due. PF contributions are not here — your in-hand salary is already net of them." %}</th>
+
+            {% if show_spending %}
+              <th class="num">Living{% info "Sum of your expenses. Ones marked as inflating grow by the inflation rate every 12 months from the projection start; flat ones never change." %}</th>
+              <th class="num">Insurance{% info "The actual premium due this month, never smoothed. A yearly policy shows its full premium once a year and nothing in the other eleven months." %}</th>
+              <th class="num">EMI{% info "Every loan's EMI for this month added together. Per-loan amounts are fixed month to month, so they live on each loan's own schedule page rather than as columns here. The final instalment of a loan is capped at whatever is actually left owing." %}</th>
+              <th class="num">SIP{% info "All active SIPs added up. Each one steps up on its own fund's anniversary, not on a common date." %}</th>
+              <th class="num">PF in{% info "Employee plus employer contribution. Shown for information only — it is deliberately NOT part of Out, because your in-hand salary already excludes the employee half and the employer half never reaches your bank." %}</th>
+            {% endif %}
+            <th class="num">Out{% info "Living expenses + insurance + EMIs + SIPs. PF contributions are excluded on purpose." %}</th>
+
+            <th class="num">Surplus{% info "In minus Out. This is what is left to build up the bank balance each month." %}</th>
+
+            {% if show_balances %}
+              <th class="num">EF target{% info "Either your fixed emergency-fund amount, or N months of living expenses + insurance (at its monthly equivalent) + EMIs. The bank is held at this level." %}</th>
+              <th class="num">Bank{% info "Last month's balance plus interest plus the surplus, capped at the EF target. Anything above the cap sweeps into the surplus pool the same month." %}</th>
+              <th class="num">Pool{% info "Surplus swept off the top of the bank, compounding at the surplus pool rate. This is the only balance a deficit month can draw on after the bank." %}</th>
+              <th class="num">Invest{% info "Your funds only: last month's value grown at the blended return, plus this month's SIP. Swept surplus never lands here, and units are never sold to cover a shortfall." %}</th>
+              <th class="num">PF{% info "The EPF corpus: last month's balance plus its interest plus this month's contributions. Counts towards net worth but is never spendable." %}</th>
+              <th class="num">Loans{% info "Total principal still outstanding across every loan, after this month's EMI." %}</th>
+            {% endif %}
+
+            <th class="num">Net worth{% info "Bank + surplus pool + investments + PF corpus, minus all loan principal outstanding." %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in page_obj %}
+            <tr class="{% if row.cash_shortfall %}shortfall{% endif %}">
+              <td class="sticky-col">
+                {{ row.month|month_label }}
+                {% if row.ef_goal_met %}<span class="pill yes" title="Emergency fund target met">EF</span>{% endif %}
+              </td>
+
+              {% if show_income %}
+                <td class="num">{{ row.salary|inr }}</td>
+                <td class="num">{% if row.bonus %}{{ row.bonus|inr }}{% else %}&mdash;{% endif %}</td>
+              {% endif %}
+              <td class="num">{{ row.total_inflow|inr }}</td>
+
+              {% if show_spending %}
+                <td class="num">{{ row.living_expenses|inr }}</td>
+                <td class="num">{% if row.insurance %}{{ row.insurance|inr }}{% else %}&mdash;{% endif %}</td>
+                <td class="num">{{ row.total_emi|inr }}</td>
+                <td class="num">{{ row.sip|inr }}</td>
+                <td class="num derived">{% if row.pf_contribution %}{{ row.pf_contribution|inr }}{% else %}&mdash;{% endif %}</td>
+              {% endif %}
+              <td class="num">{{ row.total_outflow|inr }}</td>
+
+              <td class="num {{ row.net_surplus|net_class }}">{{ row.net_surplus|inr }}</td>
+
+              {% if show_balances %}
+                <td class="num derived">{{ row.ef_target|inr }}</td>
+                <td class="num {{ row.bank_balance|net_class }}">{{ row.bank_balance|inr }}</td>
+                <td class="num"
+                    {% if row.swept_to_pool %}title="{{ row.swept_to_pool|inr }} swept in this month"{% elif row.drawn_from_pool %}title="{{ row.drawn_from_pool|inr }} drawn out this month"{% endif %}>{{ row.pool_balance|inr }}</td>
+                <td class="num">{{ row.investment_balance|inr }}</td>
+                <td class="num">{{ row.pf_balance|inr }}</td>
+                <td class="num">{{ row.total_loan_balance|inr }}</td>
+              {% endif %}
+
+              <td class="num strong {{ row.net_worth|net_class }}">{{ row.net_worth|inr }}</td>
+            </tr>
+          {% empty %}
+            <tr><td class="empty" colspan="24">No months to show. Check your settings.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+      <div class="pagination">
+        {% if page_obj.has_previous %}
+          <a class="btn ghost" href="{% query_with request page=page_obj.previous_page_number %}">Previous</a>
+        {% endif %}
+        <span class="page-info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a class="btn ghost" href="{% query_with request page=page_obj.next_page_number %}">Next</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

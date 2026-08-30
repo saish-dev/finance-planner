@@ -1,0 +1,84 @@
+{% extends "planner/base.html" %}
+{% load money %}
+
+{% block title %}{{ loan.name }}{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <h1>{{ loan.name }}</h1>
+    <p class="subtitle">
+      <a href="{% url 'loans' %}">&larr; All loans</a>
+      &middot; EMI {{ loan.monthly_emi|inr }} at {{ loan.annual_interest_pct|pct }} a year
+    </p>
+  </div>
+
+  <div class="cards">
+    <div class="card stat">
+      <span class="stat-label">Opening balance</span>
+      <strong class="stat-value">{{ opening_balance|inr }}</strong>
+      <span class="stat-foot">
+        {% if loan.principal_outstanding_today is None %}Back-solved from the EMI and tenure{% else %}As you entered it{% endif %}
+      </span>
+    </div>
+    <div class="card stat">
+      <span class="stat-label">Last EMI</span>
+      <strong class="stat-value">{{ last_emi_month|month_label }}</strong>
+      <span class="stat-foot">
+        {{ months_remaining }} EMI{{ months_remaining|pluralize }} left
+        {% if loan.end_month_override %}&middot; end month override in force{% endif %}
+      </span>
+    </div>
+    <div class="card stat">
+      <span class="stat-label">Interest still to pay</span>
+      <strong class="stat-value">{{ total_interest|inr }}</strong>
+      <span class="stat-foot">{{ total_paid|inr }} total outflow over the horizon</span>
+    </div>
+  </div>
+
+  {% if residual %}
+    <div class="banner warning">
+      The EMIs stop before this loan is repaid &mdash; {{ residual|inr }} is still outstanding at the
+      last EMI month. Check the tenure or the end month override.
+    </div>
+  {% endif %}
+
+  <div class="card chart-card">
+    <div class="card-head"><h2>Balance over time</h2></div>
+    <div class="chart-holder"><canvas id="loan-chart"></canvas></div>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2>Amortisation</h2></div>
+    <div class="table-scroll tall">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="sticky-col">Month</th>
+            <th class="num">Opening</th>
+            <th class="num">EMI</th>
+            <th class="num">Interest</th>
+            <th class="num">Principal</th>
+            <th class="num">Closing</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in schedule %}
+            <tr>
+              <td class="sticky-col">{{ entry.month|month_label }}</td>
+              <td class="num">{{ entry.opening|inr }}</td>
+              <td class="num">{{ entry.emi|inr }}</td>
+              <td class="num">{{ entry.interest|inr }}</td>
+              <td class="num">{{ entry.principal|inr }}</td>
+              <td class="num strong">{{ entry.closing|inr }}</td>
+            </tr>
+          {% empty %}
+            <tr><td class="empty" colspan="6">This loan has no EMIs inside the current projection window.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <script id="loan-chart-data" type="application/json">{{ chart_data|safe }}</script>
+  <script>renderLoanChart(JSON.parse(document.getElementById('loan-chart-data').textContent));</script>
+{% endblock %}

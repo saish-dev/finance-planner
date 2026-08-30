@@ -1,0 +1,102 @@
+{% load money %}
+
+{% for notice in horizon.notices %}
+  <div class="banner warning">{{ notice }}</div>
+{% endfor %}
+
+{% if not has_data %}
+  <div class="banner info">
+    Nothing to project yet. Add your salary on the <a href="{% url 'income' %}">Income</a> page,
+    then your <a href="{% url 'expenses' %}">expenses</a>, <a href="{% url 'loans' %}">loans</a>
+    and <a href="{% url 'investments' %}">investments</a>.
+  </div>
+{% endif %}
+
+{% comment %}
+  Four cards. What the other four used to say now lives in the footnote line
+  of whichever card it belongs to.
+{% endcomment %}
+<div class="cards">
+  <div class="card stat">
+    <span class="stat-label">Net worth now{% info "Bank + surplus pool + investments + PF corpus, minus every loan's outstanding principal, in the first projected month." %}</span>
+    <strong class="stat-value {{ summary.first.net_worth|net_class }}">{{ summary.first.net_worth|inr }}</strong>
+    <span class="stat-foot">
+      {{ summary.first.month|month_label }} &middot;
+      lowest monthly surplus {{ summary.lowest_surplus|inr_compact }} in {{ summary.lowest_surplus_month|month_label }}
+    </span>
+  </div>
+
+  <div class="card stat">
+    <span class="stat-label">Net worth {{ horizon.end_year }}{% info "The same figure at the end of the horizon, split by balance below. Growth is measured from the projection start, so value you already held counts as money put in." %}</span>
+    <strong class="stat-value {{ summary.last.net_worth|net_class }}">{{ summary.last.net_worth|inr }}</strong>
+    <span class="stat-foot">
+      Bank {{ summary.last.bank_balance|inr_compact }} &middot;
+      Pool {{ summary.last.pool_balance|inr_compact }} &middot;
+      Funds {{ summary.last.investment_balance|inr_compact }}{% if summary.last.pf_balance %} &middot;
+      PF {{ summary.last.pf_balance|inr_compact }}{% endif %}
+      {% if summary.last.total_capital %}<br>
+        {{ summary.last.total_gains|inr }} of it is growth on {{ summary.last.total_capital|inr }} put in
+      {% endif %}
+    </span>
+  </div>
+
+  <div class="card stat">
+    <span class="stat-label">Emergency fund{% info "The first month the bank reaches its target. The bank is held there afterwards, and every rupee above it sweeps into the surplus pool the same month." %}</span>
+    {% if summary.ef_reached_month %}
+      <strong class="stat-value positive">{{ summary.ef_reached_month|month_label }}</strong>
+      <span class="stat-foot">
+        Target {{ summary.first.ef_target|inr }} reached{% if summary.total_swept %} &middot;
+        {{ summary.total_swept|inr }} swept to the pool over the horizon{% endif %}
+      </span>
+    {% else %}
+      <strong class="stat-value warn">Not by {{ horizon.end_year }}</strong>
+      <span class="stat-foot">Target {{ summary.first.ef_target|inr }}</span>
+    {% endif %}
+  </div>
+
+  <div class="card stat">
+    <span class="stat-label">Loans outstanding{% info "Principal still owed across every loan in the first projected month. Debt-free is the month after the final EMI falls due." %}</span>
+    <strong class="stat-value">{{ summary.opening_loan_balance|inr }}</strong>
+    <span class="stat-foot">
+      {% if not summary.has_loans %}No loans
+      {% elif summary.debt_free_month %}Debt-free from {{ summary.debt_free_month|month_label }}
+      {% else %}Still running in {{ horizon.end_year }}{% endif %}
+    </span>
+  </div>
+</div>
+
+{% if summary.shortfall_months %}
+  <div class="banner error">
+    {{ summary.shortfall_months }} month{{ summary.shortfall_months|pluralize }} run out of cash entirely,
+    starting {{ summary.first_shortfall_month|month_label }} &mdash; the bank goes negative because the
+    surplus is short and the surplus pool has already been drained. Fund units are never sold to cover it.
+  </div>
+{% endif %}
+
+<div class="card chart-card">
+  <div class="card-head">
+    <div>
+      <h2>Where your money sits, year by year</h2>
+      <p class="note">
+        One point per year end. Investments are your funds only &mdash; SIPs and growth at a
+        blended {{ blended_return|pct }} &mdash; while surplus swept off the bank accumulates in the
+        pool at {{ planner.surplus_pool_return_pct|pct }}. A deficit draws on the pool; fund units
+        and the PF corpus are never sold.
+      </p>
+    </div>
+  </div>
+  <div class="chart-holder"><canvas id="net-worth-chart"></canvas></div>
+</div>
+
+<div class="card chart-card">
+  <div class="card-head">
+    <div>
+      <h2>Annual net surplus</h2>
+      <p class="note">Income minus living costs, insurance, EMIs and SIPs, totalled per year.</p>
+    </div>
+  </div>
+  <div class="chart-holder"><canvas id="surplus-chart"></canvas></div>
+</div>
+
+<script id="chart-data" type="application/json">{{ chart_data|safe }}</script>
+<script>renderPlannerCharts(JSON.parse(document.getElementById('chart-data').textContent));</script>

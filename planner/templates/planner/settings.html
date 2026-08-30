@@ -1,0 +1,76 @@
+{% extends "planner/base.html" %}
+{% load money %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <h1>Settings</h1>
+    <p class="subtitle">The assumptions behind every table and chart in the app.</p>
+  </div>
+
+  <form method="post" class="card settings-form">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="banner error">{% for error in form.non_field_errors %}{{ error }}{% endfor %}</div>
+    {% endif %}
+
+    <fieldset>
+      <legend>Horizon</legend>
+      <div class="form-grid">
+        {% for field in form %}{% if field.name in "start_month,project_to_year" %}
+          <label class="field {% if field.errors %}has-error{% endif %}">
+            <span class="field-label">{{ field.label }}</span>
+            {{ field }}
+            {% if field.help_text %}<span class="field-help">{{ field.help_text }}</span>{% endif %}
+            {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+          </label>
+        {% endif %}{% endfor %}
+      </div>
+      <p class="note">
+        Projections are capped at 30 years, so the furthest you can go from this start month is
+        {{ max_year }}. A year outside the range is clamped rather than rejected.
+      </p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Growth assumptions</legend>
+      <div class="form-grid">
+        {% for field in form %}{% if field.name in "expense_inflation_pct,default_salary_hike_pct,default_hike_month,default_investment_return_pct" %}
+          <label class="field {% if field.errors %}has-error{% endif %}">
+            <span class="field-label">{{ field.label }}</span>
+            {{ field }}
+            {% if field.help_text %}<span class="field-help">{{ field.help_text }}</span>{% endif %}
+            {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+          </label>
+        {% endif %}{% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Bank, surplus pool and emergency fund</legend>
+      <div class="form-grid">
+        {% for field in form %}{% if field.name in "bank_balance_today,bank_interest_pct,surplus_pool_today,surplus_pool_return_pct,ef_target_months,ef_target_fixed_amount" %}
+          <label class="field {% if field.errors %}has-error{% endif %}">
+            <span class="field-label">{{ field.label }}</span>
+            {{ field }}
+            {% if field.help_text %}<span class="field-help">{{ field.help_text }}</span>{% endif %}
+            {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+          </label>
+        {% endif %}{% endfor %}
+      </div>
+      <p class="note">
+        The bank balance doubles as the emergency fund. Anything above the target sweeps into the
+        surplus pool the same month &mdash; kept separate from your funds, because money you did not
+        choose to buy units with should not compound at your funds' return. A deficit is drawn from
+        the bank first and then from the pool; fund units are never sold.
+      </p>
+    </fieldset>
+
+    <div class="form-actions">
+      <button class="btn primary" type="submit">Save settings</button>
+      <a class="btn ghost" href="{% url 'dashboard' %}">Back to dashboard</a>
+    </div>
+  </form>
+{% endblock %}
