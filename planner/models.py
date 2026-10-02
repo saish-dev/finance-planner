@@ -29,6 +29,18 @@ MONTH_CHOICES = [
 
 MAX_PROJECTION_YEARS = 30
 
+FREQ_MONTHLY = "monthly"
+FREQ_QUARTERLY = "quarterly"
+FREQ_HALF_YEARLY = "half_yearly"
+FREQ_YEARLY = "yearly"
+FREQUENCY_CHOICES = [
+    (FREQ_MONTHLY, "Monthly"),
+    (FREQ_QUARTERLY, "Quarterly"),
+    (FREQ_HALF_YEARLY, "Half-Yearly"),
+    (FREQ_YEARLY, "Yearly"),
+]
+FREQUENCY_MONTHS = {FREQ_MONTHLY: 1, FREQ_QUARTERLY: 3, FREQ_HALF_YEARLY: 6, FREQ_YEARLY: 12}
+
 
 class UserOwned(models.Model):
     user = models.ForeignKey(
@@ -82,24 +94,11 @@ class PlannerSettings(UserOwned):
         help_text="Used for any holding that does not set its own expected return.",
         **PERCENT,
     )
-    surplus_pool_today = models.DecimalField(
-        default=Decimal("0.00"),
-        verbose_name="Surplus pool today",
-        help_text="Un-earmarked savings you already hold that are neither your bank "
-                  "buffer nor a fund. Leave at zero if you have none.",
-        **MONEY,
-    )
-    surplus_pool_return_pct = models.DecimalField(
-        default=Decimal("6.00"),
-        verbose_name="Surplus pool return % p.a.",
-        help_text="What the swept surplus earns while it sits unallocated -- roughly a "
-                  "liquid or arbitrage fund. Kept separate from your funds' returns.",
-        **PERCENT,
-    )
     ef_target_months = models.PositiveIntegerField(
         default=6,
         verbose_name="Emergency fund target (months)",
-        help_text="Months of essential spending: living expenses + insurance + EMIs.",
+        help_text="Months of essential spending: living expenses + insurance + EMIs. Purely "
+                  "a milestone shown against your bank balance -- nothing is moved because of it.",
     )
     ef_target_fixed_amount = models.DecimalField(
         null=True, blank=True,
@@ -143,11 +142,50 @@ class SalaryChange(UserOwned):
 
 
 class IncomeExtra(UserOwned):
-    """A bonus or other variable pay stream, paid once a year."""
+    """A bonus or other variable pay stream, paid once a year -- or split.
+
+    Two separate things about timing, easy to conflate but not the same:
+
+    * `payout_month` / `payout_end_month` are a calendar-month PATTERN --
+      which month (or months, split evenly) the bonus pays out in every year
+      it is active. By default the whole `annual_amount` lands in
+      `payout_month`. Setting `payout_end_month` splits it evenly across
+      every calendar month from `payout_month` through there instead --
+      e.g. June through March pays it out in 10 equal parts -- wrapping into
+      the next year if the end month is earlier than the start month.
+    * `start_month` / `end_month` are real calendar dates that bound WHEN
+      that pattern applies -- because a bonus is not guaranteed to be the
+      same every year forever. A joining bonus, a scheme that changed with a
+      new employer, or a fixed-term allowance all start or stop at a
+      specific point, not just "every April". Blank `start_month` means
+      already running at the projection start; blank `end_month` means it
+      never stops.
+    """
 
     label = models.CharField(max_length=120)
     annual_amount = models.DecimalField(**MONEY)
-    payout_month = models.IntegerField(choices=MONTH_CHOICES, default=4)
+    payout_month = models.IntegerField(
+        choices=MONTH_CHOICES, default=4,
+        verbose_name="Paid in",
+        help_text="The month this pays out in, every year it's active.",
+    )
+    payout_end_month = models.IntegerField(
+        null=True, blank=True, choices=MONTH_CHOICES,
+        verbose_name="Split through",
+        help_text="Optional. Leave blank for a single lump-sum payout. If set, the annual "
+                  "amount is split evenly across every month from 'Paid in' through here.",
+    )
+    start_month = models.DateField(
+        null=True, blank=True,
+        verbose_name="Starts in",
+        help_text="Blank means this bonus is already running at the projection start.",
+    )
+    end_month = models.DateField(
+        null=True, blank=True,
+        verbose_name="Ends in",
+        help_text="Blank means it continues indefinitely -- the same amount, every year, "
+                  "forever. Set this if the bonus is a fixed-term or one-off arrangement.",
+    )
 
     class Meta:
         ordering = ["payout_month", "label"]
@@ -156,16 +194,75 @@ class IncomeExtra(UserOwned):
     def __str__(self):
         return f"{self.label} ({self.get_payout_month_display()})"
 
+    def save(self, *args, **kwargs):
+        if self.start_month:
+            self.start_month = month_start(self.start_month)
+        if self.end_month:
+            self.end_month = month_start(self.end_month)
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        if self.start_month and self.end_month and self.end_month < self.start_month:
+            raise ValidationError({"end_month": "The end month cannot be before the start month."})
+
+    def installment_months(self) -> list[int]:
+        """Calendar months this bonus pays out in, in order, wrapping at year end."""
+        if not self.payout_end_month or self.payout_end_month == self.payout_month:
+            return [self.payout_month]
+        months = []
+        month = self.payout_month
+        while True:
+            months.append(month)
+            if month == self.payout_end_month:
+                break
+            month = 1 if month == 12 else month + 1
+        return months
+
+    @property
+    def installment_count(self) -> int:
+        return len(self.installment_months())
+
+    @property
+    def installment_amount(self) -> Decimal:
+        return Decimal(self.annual_amount) / self.installment_count
+
+    def effective_start(self, planner_start: dt.date) -> dt.date:
+        """Blank start means 'already running', i.e. from the projection start."""
+        return month_start(self.start_month or planner_start)
+
 
 class Expense(UserOwned):
-    """A recurring living expense.
+    """A recurring living expense -- monthly, or paid less often.
 
     EMIs, SIPs and insurance premiums do NOT belong here -- they have their own
     tables and their own cashflow columns, so putting them here double-counts.
+
+    An expense that only falls due once a year (property tax, an annual
+    subscription, school fees) is entered at its real amount and real month,
+    the same way `InsurancePolicy` handles premiums: the cashflow charges it
+    in full in that one month rather than smoothing it across all twelve.
     """
 
+    MONTHLY = FREQ_MONTHLY
+    QUARTERLY = FREQ_QUARTERLY
+    HALF_YEARLY = FREQ_HALF_YEARLY
+    YEARLY = FREQ_YEARLY
+    FREQUENCY_CHOICES = FREQUENCY_CHOICES
+    FREQUENCY_MONTHS = FREQUENCY_MONTHS
+
     name = models.CharField(max_length=120)
-    monthly_amount = models.DecimalField(**MONEY)
+    amount = models.DecimalField(
+        verbose_name="Amount",
+        help_text="What this costs each time it falls due -- not divided down to a monthly figure.",
+        **MONEY,
+    )
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default=MONTHLY)
+    due_month = models.IntegerField(
+        choices=MONTH_CHOICES, default=1,
+        verbose_name="Due in",
+        help_text="Month this expense is charged. Quarterly and half-yearly expenses repeat "
+                  "every 3 or 6 months from here. Ignored for monthly expenses.",
+    )
     inflates = models.BooleanField(
         default=True,
         help_text="Grow by the planner's inflation rate every 12 months from the projection start.",
@@ -175,7 +272,54 @@ class Expense(UserOwned):
         ordering = ["name"]
 
     def __str__(self):
-        return f"{self.name}: {self.monthly_amount}/mo"
+        return f"{self.name}: {self.amount}/{self.get_frequency_display().lower()}"
+
+    @property
+    def frequency_months(self) -> int:
+        return self.FREQUENCY_MONTHS[self.frequency]
+
+    @property
+    def payments_per_year(self) -> int:
+        return 12 // self.frequency_months
+
+    @property
+    def annual_cost(self) -> Decimal:
+        return Decimal(self.amount) * self.payments_per_year
+
+    @property
+    def monthly_equivalent(self) -> Decimal:
+        """Only ever used to size the emergency fund -- cashflow is never smoothed."""
+        return self.annual_cost / Decimal("12")
+
+
+class OneTimeExpense(UserOwned):
+    """A single purchase or one-off cost -- a phone, a trip, a repair.
+
+    Deliberately separate from `Expense`: there is no frequency, no due-month
+    rule and no inflation adjustment, because none of that applies to a
+    single transaction. Charged in full in `month`, once, and never counted
+    towards the emergency-fund target -- a one-off purchase is not an
+    ongoing essential cost.
+    """
+
+    name = models.CharField(max_length=120)
+    amount = models.DecimalField(
+        help_text="The full amount of this one-off purchase.",
+        **MONEY,
+    )
+    month = models.DateField(help_text="The month this was, or will be, spent.")
+
+    class Meta:
+        ordering = ["-month", "name"]
+        verbose_name = "one-time expense"
+        verbose_name_plural = "one-time expenses"
+
+    def __str__(self):
+        return f"{self.name}: {self.amount} ({format_month(self.month)})"
+
+    def save(self, *args, **kwargs):
+        self.month = month_start(self.month)
+        super().save(*args, **kwargs)
 
 
 class Loan(UserOwned):
@@ -493,17 +637,12 @@ class RetirementAccount(UserOwned):
 class InsurancePolicy(UserOwned):
     """A policy whose premium is charged in the exact month it falls due."""
 
-    MONTHLY = "monthly"
-    QUARTERLY = "quarterly"
-    HALF_YEARLY = "half_yearly"
-    YEARLY = "yearly"
-    FREQUENCY_CHOICES = [
-        (MONTHLY, "Monthly"),
-        (QUARTERLY, "Quarterly"),
-        (HALF_YEARLY, "Half-Yearly"),
-        (YEARLY, "Yearly"),
-    ]
-    FREQUENCY_MONTHS = {MONTHLY: 1, QUARTERLY: 3, HALF_YEARLY: 6, YEARLY: 12}
+    MONTHLY = FREQ_MONTHLY
+    QUARTERLY = FREQ_QUARTERLY
+    HALF_YEARLY = FREQ_HALF_YEARLY
+    YEARLY = FREQ_YEARLY
+    FREQUENCY_CHOICES = FREQUENCY_CHOICES
+    FREQUENCY_MONTHS = FREQUENCY_MONTHS
 
     name = models.CharField(max_length=120)
     policy_type = models.CharField(max_length=60, blank=True, help_text="Term/Life, Health, Motor, ...")

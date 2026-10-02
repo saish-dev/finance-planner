@@ -21,6 +21,7 @@ from planner.models import (
     InsurancePolicy,
     InvestmentHolding,
     Loan,
+    OneTimeExpense,
     PlannerSettings,
     RetirementAccount,
     SalaryChange,
@@ -42,7 +43,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         user = get_owner()
-        models = [SalaryChange, IncomeExtra, Expense, Loan, InvestmentHolding,
+        models = [SalaryChange, IncomeExtra, Expense, OneTimeExpense, Loan, InvestmentHolding,
                   RetirementAccount, InsurancePolicy]
 
         existing = any(model.objects.filter(user=user).exists() for model in models)
@@ -97,7 +98,24 @@ class Command(BaseCommand):
             ("Dining and leisure", "8000.00", True),
             ("Subscriptions", "1200.00", False),
         ]:
-            Expense.objects.create(user=user, name=name, monthly_amount=D(amount), inflates=inflates)
+            Expense.objects.create(user=user, name=name, amount=D(amount), inflates=inflates)
+
+        # Two non-monthly expenses, to show what a lumpy annual cost looks
+        # like on the cashflow page instead of being smoothed into "Living".
+        Expense.objects.create(
+            user=user, name="Property tax", amount=D("18000.00"),
+            frequency=Expense.YEARLY, due_month=3, inflates=True,
+        )
+        Expense.objects.create(
+            user=user, name="Society maintenance", amount=D("9000.00"),
+            frequency=Expense.HALF_YEARLY, due_month=1, inflates=True,
+        )
+
+        # A one-time purchase: a single transaction, added with its own
+        # month, no frequency and no recurrence.
+        OneTimeExpense.objects.create(
+            user=user, name="New phone", amount=D("50000.00"), month=add_months(start, 8),
+        )
 
         # Three loans of different shapes: one with an explicit tenure, one
         # long-running, and one where the tenure is left for the app to derive.

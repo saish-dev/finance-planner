@@ -6,6 +6,7 @@ from .models import (
     InsurancePolicy,
     InvestmentHolding,
     Loan,
+    OneTimeExpense,
     PlannerSettings,
     SalaryChange,
 )
@@ -29,23 +30,51 @@ class IncomeExtraAdmin(admin.ModelAdmin):
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ("name", "monthly_amount", "inflates", "user")
-    list_filter = ("inflates",)
+    list_display = ("name", "amount", "frequency", "due_month", "inflates", "user")
+    list_filter = ("frequency", "inflates")
+
+
+@admin.register(OneTimeExpense)
+class OneTimeExpenseAdmin(admin.ModelAdmin):
+    list_display = ("name", "amount", "month", "user")
+    list_filter = ("user",)
 
 
 @admin.register(Loan)
 class LoanAdmin(admin.ModelAdmin):
-    list_display = ("name", "start_month", "monthly_emi", "annual_interest_pct",
-                    "principal_outstanding_today", "tenure_months", "user")
+    list_display = (
+        "name",
+        "start_month",
+        "monthly_emi",
+        "annual_interest_pct",
+        "principal_outstanding_today",
+        "tenure_months",
+        "user",
+    )
 
 
 @admin.register(InvestmentHolding)
 class InvestmentHoldingAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "current_value", "monthly_sip",
-                    "annual_stepup_pct", "expected_return_pct", "user")
+    list_display = (
+        "name",
+        "category",
+        "current_value",
+        "monthly_sip",
+        "annual_stepup_pct",
+        "expected_return_pct",
+        "user",
+    )
 
 
 @admin.register(InsurancePolicy)
 class InsurancePolicyAdmin(admin.ModelAdmin):
-    list_display = ("name", "policy_type", "premium_amount", "frequency",
-                    "premium_month", "start_month", "end_month", "user")
+    list_display = (
+        "name",
+        "policy_type",
+        "premium_amount",
+        "frequency",
+        "premium_month",
+        "start_month",
+        "end_month",
+        "user",
+    )

@@ -13,6 +13,7 @@ from planner.models import (
     InsurancePolicy,
     InvestmentHolding,
     Loan,
+    OneTimeExpense,
     PlannerSettings,
     RetirementAccount,
     SalaryChange,
@@ -40,8 +41,6 @@ def make_planner(user, **overrides):
         bank_balance_today=Decimal("0"),
         bank_interest_pct=Decimal("0"),
         default_investment_return_pct=Decimal("12"),
-        surplus_pool_today=Decimal("0"),
-        surplus_pool_return_pct=Decimal("0"),
         ef_target_months=0,
         ef_target_fixed_amount=None,
     )
@@ -55,9 +54,16 @@ def make_salary(user, month=JAN_2026, amount="100000", note=""):
     )
 
 
-def make_expense(user, name="Living", amount="40000", inflates=False):
+def make_expense(user, name="Living", amount="40000", inflates=False, frequency="monthly", due_month=1):
     return Expense.objects.create(
-        user=user, name=name, monthly_amount=Decimal(amount), inflates=inflates
+        user=user, name=name, amount=Decimal(amount), inflates=inflates,
+        frequency=frequency, due_month=due_month,
+    )
+
+
+def make_one_time_expense(user, name="Phone", amount="50000", month=JAN_2026):
+    return OneTimeExpense.objects.create(
+        user=user, name=name, amount=Decimal(amount), month=month,
     )
 
 
@@ -115,7 +121,10 @@ def make_pf(user, name="EPF", **overrides):
     return RetirementAccount.objects.create(user=user, name=name, **defaults)
 
 
-def make_bonus(user, label="Bonus", amount="120000", month=4):
+def make_bonus(user, label="Bonus", amount="120000", month=4, split_end_month=None,
+               start_month=None, end_month=None):
     return IncomeExtra.objects.create(
-        user=user, label=label, annual_amount=Decimal(amount), payout_month=month
+        user=user, label=label, annual_amount=Decimal(amount),
+        payout_month=month, payout_end_month=split_end_month,
+        start_month=start_month, end_month=end_month,
     )

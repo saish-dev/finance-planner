@@ -32,3 +32,20 @@
     </form>
   </td>
 </tr>
+{% comment %}
+  Progressive disclosure: "Due in" only matters once something repeats less
+  often than monthly, so hide it until the user picks a frequency it applies
+  to. Scoped to this one row's own form and safe to no-op elsewhere.
+{% endcomment %}
+<script>
+(function () {
+  var row = document.currentScript.closest("tr");
+  var freq = row.querySelector('[name="frequency"]');
+  var due = row.querySelector('[name="due_month"]');
+  if (!freq || !due) return;
+  var dueField = due.closest(".field");
+  var sync = function () { dueField.style.display = freq.value === "monthly" ? "none" : ""; };
+  freq.addEventListener("change", sync);
+  sync();
+})();
+</script>

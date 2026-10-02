@@ -20,6 +20,7 @@ from .models import (
     InsurancePolicy,
     InvestmentHolding,
     Loan,
+    OneTimeExpense,
     PlannerSettings,
     RetirementAccount,
     SalaryChange,
@@ -82,8 +83,6 @@ class PlannerSettingsForm(StyledForm):
             "bank_balance_today",
             "bank_interest_pct",
             "default_investment_return_pct",
-            "surplus_pool_today",
-            "surplus_pool_return_pct",
             "ef_target_months",
             "ef_target_fixed_amount",
         ]
@@ -103,15 +102,34 @@ class SalaryChangeForm(StyledForm):
 
 
 class IncomeExtraForm(StyledForm):
+    start_month = MonthField(label="Starts in", required=False)
+    end_month = MonthField(label="Ends in", required=False)
+
     class Meta:
         model = IncomeExtra
-        fields = ["label", "annual_amount", "payout_month"]
+        fields = ["label", "annual_amount", "payout_month", "payout_end_month",
+                  "start_month", "end_month"]
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("start_month"), cleaned.get("end_month")
+        if start and end and end < start:
+            self.add_error("end_month", "The end month cannot be before the start month.")
+        return cleaned
 
 
 class ExpenseForm(StyledForm):
     class Meta:
         model = Expense
-        fields = ["name", "monthly_amount", "inflates"]
+        fields = ["name", "amount", "frequency", "due_month", "inflates"]
+
+
+class OneTimeExpenseForm(StyledForm):
+    month = MonthField(label="Month")
+
+    class Meta:
+        model = OneTimeExpense
+        fields = ["name", "amount", "month"]
 
 
 class PlannerAwareForm(StyledForm):

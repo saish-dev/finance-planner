@@ -147,13 +147,25 @@ def _chart_payload(years) -> str:
     return json.dumps({
         "labels": [y.year for y in years],
         "bank": [float(y.bank_balance) for y in years],
-        "pool": [float(y.pool_balance) for y in years],
         "investments": [float(y.investment_balance) for y in years],
         "pf": [float(y.pf_balance) for y in years],
         "loans": [float(y.total_loan_balance) for y in years],
         "netWorth": [float(y.net_worth) for y in years],
         "surplus": [float(y.surplus) for y in years],
     })
+
+
+def _upcoming_lumpy(rows, count=12) -> list[dict]:
+    """Non-monthly expenses/premiums due in the year ahead, soonest first.
+
+    A quick early warning for the cash a spreadsheet-style cashflow table
+    would otherwise bury in a scrolling row of numbers.
+    """
+    upcoming = []
+    for row in rows[:count]:
+        for item in row.lumpy_items:
+            upcoming.append({"month": row.month, "name": item.name, "amount": item.amount})
+    return upcoming
 
 
 def _dashboard_context(request) -> dict:
@@ -175,6 +187,7 @@ def _dashboard_context(request) -> dict:
             request.user.investmentholdings.all(), planner.default_investment_return_pct
         ),
         "has_data": bool(rows) and any(r.total_inflow or r.total_outflow for r in rows),
+        "upcoming_lumpy": _upcoming_lumpy(rows),
     }
 
 
@@ -381,10 +394,9 @@ def cashflow_csv(request):
     for loan in loans:
         header += [f"{loan.name} EMI", f"{loan.name} balance"]
     header += [
-        "Total EMI", "SIP", "Total outflow", "Net surplus",
+        "Total EMI", "SIP", "One-time expenses", "Total outflow", "Net surplus",
         "PF employee", "PF employer", "PF balance", "EF target",
-        "Bank balance", "Swept to pool", "Drawn from pool", "Surplus pool",
-        "Investments", "Total loans", "Net worth", "EF met",
+        "Bank balance", "Investments", "Total loans", "Net worth", "EF met",
     ]
     writer.writerow(header)
 
@@ -397,10 +409,9 @@ def cashflow_csv(request):
             entry = row.loan_by_id(loan.pk)
             line += [entry.emi if entry else 0, entry.balance if entry else 0]
         line += [
-            row.total_emi, row.sip, row.total_outflow, row.net_surplus,
+            row.total_emi, row.sip, row.one_time_expense, row.total_outflow, row.net_surplus,
             row.pf_employee, row.pf_employer, row.pf_balance, row.ef_target,
-            row.bank_balance, row.swept_to_pool, row.drawn_from_pool, row.pool_balance,
-            row.investment_balance, row.total_loan_balance,
+            row.bank_balance, row.investment_balance, row.total_loan_balance,
             row.net_worth, "yes" if row.ef_goal_met else "no",
         ]
         writer.writerow(line)

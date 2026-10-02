@@ -18,7 +18,7 @@
 {% endcomment %}
 <div class="cards">
   <div class="card stat">
-    <span class="stat-label">Net worth now{% info "Bank + surplus pool + investments + PF corpus, minus every loan's outstanding principal, in the first projected month." %}</span>
+    <span class="stat-label">Net worth now{% info "Bank + investments + PF corpus, minus every loan's outstanding principal, in the first projected month." %}</span>
     <strong class="stat-value {{ summary.first.net_worth|net_class }}">{{ summary.first.net_worth|inr }}</strong>
     <span class="stat-foot">
       {{ summary.first.month|month_label }} &middot;
@@ -31,7 +31,6 @@
     <strong class="stat-value {{ summary.last.net_worth|net_class }}">{{ summary.last.net_worth|inr }}</strong>
     <span class="stat-foot">
       Bank {{ summary.last.bank_balance|inr_compact }} &middot;
-      Pool {{ summary.last.pool_balance|inr_compact }} &middot;
       Funds {{ summary.last.investment_balance|inr_compact }}{% if summary.last.pf_balance %} &middot;
       PF {{ summary.last.pf_balance|inr_compact }}{% endif %}
       {% if summary.last.total_capital %}<br>
@@ -41,13 +40,10 @@
   </div>
 
   <div class="card stat">
-    <span class="stat-label">Emergency fund{% info "The first month the bank reaches its target. The bank is held there afterwards, and every rupee above it sweeps into the surplus pool the same month." %}</span>
+    <span class="stat-label">Emergency fund{% info "The first month the bank balance reaches its target. Purely a milestone -- every rupee of surplus keeps accumulating in the bank either way, before and after." %}</span>
     {% if summary.ef_reached_month %}
       <strong class="stat-value positive">{{ summary.ef_reached_month|month_label }}</strong>
-      <span class="stat-foot">
-        Target {{ summary.first.ef_target|inr }} reached{% if summary.total_swept %} &middot;
-        {{ summary.total_swept|inr }} swept to the pool over the horizon{% endif %}
-      </span>
+      <span class="stat-foot">Target {{ summary.first.ef_target|inr }} reached</span>
     {% else %}
       <strong class="stat-value warn">Not by {{ horizon.end_year }}</strong>
       <span class="stat-foot">Target {{ summary.first.ef_target|inr }}</span>
@@ -65,11 +61,28 @@
   </div>
 </div>
 
+{% if upcoming_lumpy %}
+  <div class="card lumpy-card">
+    <div class="card-head">
+      <div>
+        <h2>Coming up in the next year</h2>
+        <p class="note">Non-monthly and one-time costs -- charged in full in these months, not smoothed.</p>
+      </div>
+    </div>
+    <ul class="lumpy-list">
+      {% for item in upcoming_lumpy %}
+        <li><span class="lumpy-month">{{ item.month|month_label }}</span><span class="lumpy-name">{{ item.name }}</span><span class="lumpy-amount">{{ item.amount|inr }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
 {% if summary.shortfall_months %}
   <div class="banner error">
     {{ summary.shortfall_months }} month{{ summary.shortfall_months|pluralize }} run out of cash entirely,
-    starting {{ summary.first_shortfall_month|month_label }} &mdash; the bank goes negative because the
-    surplus is short and the surplus pool has already been drained. Fund units are never sold to cover it.
+    starting {{ summary.first_shortfall_month|month_label }} &mdash; the bank balance goes negative
+    because that month's outflow is more than the surplus and everything already in the bank. Fund
+    units are never sold to cover it.
   </div>
 {% endif %}
 
@@ -78,10 +91,9 @@
     <div>
       <h2>Where your money sits, year by year</h2>
       <p class="note">
-        One point per year end. Investments are your funds only &mdash; SIPs and growth at a
-        blended {{ blended_return|pct }} &mdash; while surplus swept off the bank accumulates in the
-        pool at {{ planner.surplus_pool_return_pct|pct }}. A deficit draws on the pool; fund units
-        and the PF corpus are never sold.
+        One point per year end. Investments are your funds only &mdash; SIPs and growth at a blended
+        {{ blended_return|pct }}. The bank balance is every rupee of net surplus, uncapped, plus
+        interest; the PF corpus is never sold to cover a shortfall.
       </p>
     </div>
   </div>

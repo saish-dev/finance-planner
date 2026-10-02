@@ -144,7 +144,7 @@ class PageTests(TestCase):
     def test_info_indicators_explain_the_columns(self):
         body = self.client.get(reverse("cashflow")).content.decode()
         self.assertIn('class="info"', body)
-        self.assertIn("capped at the EF target", body)
+        self.assertIn("Uncapped", body)
         # Accessible to keyboard and screen readers, not hover-only.
         self.assertIn('tabindex="0"', body)
         self.assertIn("aria-label=", body)
@@ -175,8 +175,6 @@ class PageTests(TestCase):
             "bank_balance_today": "250000.00",
             "bank_interest_pct": "3.50",
             "default_investment_return_pct": "12.50",
-            "surplus_pool_today": "0.00",
-            "surplus_pool_return_pct": "6.00",
             "ef_target_months": 6,
             "ef_target_fixed_amount": "",
         })
@@ -185,7 +183,7 @@ class PageTests(TestCase):
         self.planner.refresh_from_db()
         self.assertEqual(self.planner.project_to_year, 2032)
         self.assertEqual(self.planner.expense_inflation_pct, D("7.00"))
-        self.assertEqual(self.planner.surplus_pool_return_pct, D("6.00"))
+        self.assertEqual(self.planner.bank_interest_pct, D("3.50"))
 
 
 class RowEditingTests(TestCase):
@@ -195,7 +193,7 @@ class RowEditingTests(TestCase):
 
     def test_create_a_row_returns_the_refreshed_table(self):
         response = self.client.post(reverse("row_create", args=["expense"]), {
-            "name": "Groceries", "monthly_amount": "12000", "inflates": "on",
+            "name": "Groceries", "amount": "12000", "frequency": "monthly", "due_month": "1", "inflates": "on",
         })
 
         self.assertEqual(response.status_code, 200)
@@ -211,10 +209,10 @@ class RowEditingTests(TestCase):
         self.assertContains(form, "Petrol")
 
         self.client.post(reverse("row_update", args=["expense", expense.pk]), {
-            "name": "Petrol", "monthly_amount": "6500", "inflates": "on",
+            "name": "Petrol", "amount": "6500", "frequency": "monthly", "due_month": "1", "inflates": "on",
         })
         expense.refresh_from_db()
-        self.assertEqual(expense.monthly_amount, D("6500.00"))
+        self.assertEqual(expense.amount, D("6500.00"))
 
         response = self.client.post(reverse("row_delete", args=["expense", expense.pk]))
         self.assertEqual(response.status_code, 200)

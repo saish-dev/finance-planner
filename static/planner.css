@@ -21,7 +21,6 @@
   --series-3: #1baf7a;   /* bank */
   --series-4: #eda100;   /* loans outstanding */
   --series-5: #e87ba4;   /* PF corpus */
-  --series-6: #008300;   /* surplus pool */
   --polarity-negative: #e34948;
 
   --good: #0ca30c;
@@ -53,7 +52,6 @@
     --series-3: #199e70;
     --series-4: #c98500;
     --series-5: #d55181;
-    --series-6: #008300;
     --polarity-negative: #e66767;
 
     --good-text: #0ca30c;
@@ -241,6 +239,27 @@ h3 { margin: 0; font-size: 14px; }
 .negative { color: var(--critical); }
 .warn { color: var(--text-secondary); }
 
+/* ------------------------------------------------------------ upcoming lumpy */
+
+.lumpy-list { list-style: none; margin: 0; padding: 4px 18px 14px; }
+.lumpy-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.lumpy-list li:last-child { border-bottom: none; }
+.lumpy-month {
+  flex: 0 0 72px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.lumpy-name { flex: 1; color: var(--text-primary); }
+.lumpy-amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+
 /* ---------------------------------------------------------------- charts */
 
 .chart-card .chart-holder { padding: 16px 18px 18px; height: 340px; }
@@ -404,6 +423,17 @@ h3 { margin: 0; font-size: 14px; }
   color: var(--text-secondary);
 }
 .pill.yes { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.pill.lumpy {
+  margin-left: 4px;
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  text-transform: uppercase;
+  font-size: 10px;
+  cursor: help;
+}
+
+.cashflow tr.lumpy-row td { background: color-mix(in srgb, var(--warning) 7%, transparent); }
+.cashflow tr.lumpy-row.shortfall td { background: color-mix(in srgb, var(--critical) 9%, transparent); }
 
 .pagination {
   display: flex;

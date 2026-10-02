@@ -28,6 +28,7 @@ from .factories import (
     make_expense,
     make_holding,
     make_loan,
+    make_one_time_expense,
     make_pf,
     make_planner,
     make_policy,
@@ -52,10 +53,9 @@ class HandCalculatedScenarioTests(TestCase):
         outflow   40000 living + 10000 EMI + 10000 SIP = 60000
         surplus   40000
         loan      100000 * 1.01 - 10000            =  91000
-        bank      EF target is 0, so all 40000 sweeps out -> 0
-        pool      0 + 40000 swept surplus          =  40000
-        invest    0 + 10000 SIP (sweeps do NOT come here)  =  10000
-        net worth 0 + 40000 + 10000 - 91000        = -41000
+        bank      0 + 40000 surplus, uncapped      =  40000
+        invest    0 + 10000 SIP (the bank balance is not units bought) = 10000
+        net worth 40000 + 10000 - 91000            = -41000
     """
 
     def setUp(self):
@@ -84,10 +84,9 @@ class HandCalculatedScenarioTests(TestCase):
         self.assertEqual(row.total_outflow, D("60000.00"))
         self.assertEqual(row.net_surplus, D("40000.00"))
         self.assertEqual(row.total_loan_balance, D("91000.00"))
-        self.assertEqual(row.bank_balance, D("0.00"))
-        self.assertEqual(row.swept_to_pool, D("40000.00"))
-        self.assertEqual(row.pool_balance, D("40000.00"))
-        # The SIP alone -- swept surplus is not units you bought.
+        # No cap: the whole 40000 surplus lands straight in the bank.
+        self.assertEqual(row.bank_balance, D("40000.00"))
+        # The SIP alone -- the bank balance is not units you bought.
         self.assertEqual(row.investment_balance, D("10000.00"))
         self.assertEqual(row.net_worth, D("-41000.00"))
 
@@ -98,9 +97,9 @@ class HandCalculatedScenarioTests(TestCase):
         # Investments (SIP only): 10000*1.01+10000 = 20100 ; then 30301
         self.assertEqual(self.rows[1].investment_balance, D("20100.00"))
         self.assertEqual(self.rows[2].investment_balance, D("30301.00"))
-        # Pool (0% in this scenario): 40000 swept a month.
-        self.assertEqual(self.rows[1].pool_balance, D("80000.00"))
-        self.assertEqual(self.rows[2].pool_balance, D("120000.00"))
+        # Bank (0% interest in this scenario): 40000 accumulates a month.
+        self.assertEqual(self.rows[1].bank_balance, D("80000.00"))
+        self.assertEqual(self.rows[2].bank_balance, D("120000.00"))
         # 120000 + 30301 - 72729.10
         self.assertEqual(self.rows[2].net_worth, D("77571.90"))
 
@@ -133,7 +132,7 @@ class ClosedFormTests(TestCase):
         rows = build_projection(user)
 
         # The fund receives the 10,000 SIP and compounds it; the 50,000
-        # surplus sweeps to the pool, which earns 0% in this scenario.
+        # surplus accumulates in the bank, which earns 0% in this scenario.
         for months in (3, 12, 24):
             row = rows[months - 1]
             expected = D("10000") * annuity("0.01", months)
@@ -141,9 +140,9 @@ class ClosedFormTests(TestCase):
                 row.investment_balance, expected, delta=D("1.00"),
                 msg=f"investment balance at month {months}",
             )
-            self.assertEqual(row.pool_balance, D("50000") * months)
-            # No bank balance and no loans, so net worth is pool + fund.
-            self.assertEqual(row.net_worth, row.pool_balance + row.investment_balance)
+            self.assertEqual(row.bank_balance, D("50000") * months)
+            # No loans, so net worth is bank + fund.
+            self.assertEqual(row.net_worth, row.bank_balance + row.investment_balance)
 
     def test_loan_balance_at_months_3_12_and_24(self):
         user = make_user()
@@ -231,6 +230,54 @@ class SalaryTests(TestCase):
         self.assertEqual(rows[3].bonus, D("120000.00"))
         self.assertEqual(rows[3].total_inflow, D("220000.00"))
         self.assertEqual(sum(r.bonus for r in rows), D("120000.00"))
+
+    def test_bonus_split_across_a_chosen_month_range(self):
+        user = make_user()
+        make_planner(user)
+        make_salary(user)
+        make_bonus(user, amount="100000", month=4, split_end_month=6)  # Apr, May, Jun
+        rows = build_projection(user)
+
+        self.assertEqual(rows[2].bonus, D("0.00"))       # March -- before the window
+        self.assertEqual(rows[3].bonus, D("33333.33"))   # April
+        self.assertEqual(rows[4].bonus, D("33333.33"))   # May
+        self.assertEqual(rows[5].bonus, D("33333.33"))   # June
+        self.assertEqual(rows[6].bonus, D("0.00"))       # July -- after the window
+
+    def test_bonus_split_wraps_across_the_calendar_year(self):
+        user = make_user()
+        make_planner(user)
+        make_salary(user)
+        make_bonus(user, amount="100000", month=6, split_end_month=3)  # June through March
+        rows = build_projection(user)
+
+        # 10 months hit every year: Jun-Dec plus the following Jan-Mar.
+        hit_months = {1, 2, 3, 6, 7, 8, 9, 10, 11, 12}
+        for row in rows:
+            expected = D("10000.00") if row.month.month in hit_months else D("0.00")
+            self.assertEqual(row.bonus, expected, row.month)
+        self.assertEqual(sum(r.bonus for r in rows), D("100000.00"))
+
+    def test_bonus_does_not_apply_before_its_start_month(self):
+        user = make_user()
+        make_planner(user, project_to_year=2027)
+        make_salary(user)
+        make_bonus(user, amount="120000", month=4, start_month=dt.date(2027, 1, 1))
+        rows = build_projection(user)
+
+        self.assertEqual(rows[3].bonus, D("0.00"))    # April 2026 -- before it starts
+        self.assertEqual(rows[15].bonus, D("120000.00"))  # April 2027 -- now active
+
+    def test_bonus_stops_after_its_end_month(self):
+        user = make_user()
+        make_planner(user, project_to_year=2028)
+        make_salary(user)
+        make_bonus(user, amount="120000", month=4, end_month=dt.date(2026, 12, 1))
+        rows = build_projection(user)
+
+        self.assertEqual(rows[3].bonus, D("120000.00"))  # April 2026 -- still active
+        self.assertEqual(rows[15].bonus, D("0.00"))    # April 2027 -- stopped
+        self.assertEqual(rows[27].bonus, D("0.00"))    # April 2028 -- stopped
 
 
 class LoanTests(TestCase):
@@ -531,7 +578,6 @@ class RetirementTests(TestCase):
         # goes negative, because you cannot spend a provident fund.
         self.assertEqual(rows[0].bank_balance, D("-80000.00"))
         self.assertTrue(rows[0].cash_shortfall)
-        self.assertEqual(rows[0].drawn_from_pool, D("0.00"))
         self.assertEqual(rows[0].pf_balance, D("5000000.00"))
 
     def test_the_corpus_does_not_count_towards_the_emergency_fund(self):
@@ -689,9 +735,104 @@ class ExpenseTests(TestCase):
         self.assertEqual(rows[23].living_expenses, D("3100.00"))
         self.assertEqual(rows[24].living_expenses, D("3210.00"))
 
+    def test_yearly_expense_charges_once_a_year_in_its_due_month(self):
+        user = make_user()
+        make_planner(user, project_to_year=2026, expense_inflation_pct=D("0"))
+        make_salary(user)
+        make_expense(user, name="Property tax", amount="12000", inflates=False,
+                     frequency="yearly", due_month=3)
+        rows = build_projection(user)
 
-class BankAndSweepTests(TestCase):
-    def test_opening_balance_above_the_target_sweeps_in_month_zero(self):
+        self.assertEqual(rows[0].living_expenses, D("0.00"))  # January
+        self.assertEqual(rows[2].living_expenses, D("12000.00"))  # March
+        self.assertEqual(rows[3].living_expenses, D("0.00"))  # April
+        self.assertEqual([item.name for item in rows[2].lumpy_items], ["Property tax"])
+        self.assertEqual(rows[2].lumpy_items[0].amount, D("12000.00"))
+        self.assertFalse(rows[0].is_lumpy)
+        self.assertTrue(rows[2].is_lumpy)
+
+    def test_yearly_expense_enters_the_ef_target_smoothed_not_lumpy(self):
+        user = make_user()
+        make_planner(user, project_to_year=2026, ef_target_months=6)
+        make_salary(user)
+        make_expense(user, name="Property tax", amount="12000", inflates=False,
+                     frequency="yearly", due_month=3)
+        rows = build_projection(user)
+
+        # 6 * 1000/month equivalent -- the target must not jump in March,
+        # the one month the full 12000 actually lands.
+        self.assertEqual(rows[0].ef_target, D("6000.00"))
+        self.assertEqual(rows[2].ef_target, D("6000.00"))
+
+
+class OneTimeExpenseTests(TestCase):
+    """A single purchase, added with its own month -- no frequency at all."""
+
+    def test_charges_exactly_once_in_its_own_month(self):
+        user = make_user()
+        make_planner(user, project_to_year=2028)
+        make_salary(user)
+        make_one_time_expense(user, name="Phone", amount="50000", month=dt.date(2026, 6, 1))
+        rows = build_projection(user)
+
+        self.assertEqual(rows[4].one_time_expense, D("0.00"))    # May 2026
+        self.assertEqual(rows[5].one_time_expense, D("50000.00"))  # June 2026
+        self.assertEqual(rows[6].one_time_expense, D("0.00"))    # July 2026
+        # Never recurs -- not the following June, or any year after that.
+        self.assertEqual(rows[17].one_time_expense, D("0.00"))   # June 2027
+        self.assertEqual(rows[29].one_time_expense, D("0.00"))   # June 2028
+        self.assertEqual(sum(r.one_time_expense for r in rows), D("50000.00"))
+
+    def test_counts_towards_outflow_and_net_surplus(self):
+        user = make_user()
+        make_planner(user, project_to_year=2026)
+        make_salary(user, amount="100000")
+        make_one_time_expense(user, amount="50000", month=JAN_2026)
+        rows = build_projection(user)
+
+        self.assertEqual(rows[0].total_outflow, D("50000.00"))
+        self.assertEqual(rows[0].net_surplus, D("50000.00"))
+        self.assertEqual(rows[1].total_outflow, D("0.00"))
+
+    def test_never_enters_the_emergency_fund_target(self):
+        user = make_user()
+        make_planner(user, project_to_year=2026, ef_target_months=6)
+        make_salary(user)
+        make_one_time_expense(user, amount="50000", month=JAN_2026)
+        rows = build_projection(user)
+
+        # No other expenses, so the target is zero throughout -- even in the
+        # one month the phone is actually charged.
+        self.assertEqual(rows[0].ef_target, D("0.00"))
+
+    def test_is_flagged_lumpy_and_never_smoothed(self):
+        user = make_user()
+        make_planner(user, project_to_year=2026)
+        make_salary(user)
+        make_one_time_expense(user, name="Phone", amount="50000", month=dt.date(2026, 6, 1))
+        rows = build_projection(user)
+
+        self.assertFalse(rows[4].is_lumpy)
+        self.assertTrue(rows[5].is_lumpy)
+        self.assertEqual([item.name for item in rows[5].lumpy_items], ["Phone"])
+        self.assertEqual(rows[5].lumpy_items[0].amount, D("50000.00"))
+
+    def test_multiple_one_time_expenses_in_the_same_month_add_up(self):
+        user = make_user()
+        make_planner(user, project_to_year=2026)
+        make_salary(user)
+        make_one_time_expense(user, name="Phone", amount="50000", month=JAN_2026)
+        make_one_time_expense(user, name="Laptop", amount="90000", month=JAN_2026)
+        rows = build_projection(user)
+
+        self.assertEqual(rows[0].one_time_expense, D("140000.00"))
+        self.assertEqual({item.name for item in rows[0].lumpy_items}, {"Phone", "Laptop"})
+
+
+class BankAccumulationTests(TestCase):
+    """No cap, no pool: net surplus just piles up in the bank, forever."""
+
+    def test_surplus_keeps_accumulating_past_the_target(self):
         user = make_user()
         make_planner(user, bank_balance_today=D("1000000"), ef_target_months=6)
         make_salary(user, amount="100000")
@@ -699,88 +840,50 @@ class BankAndSweepTests(TestCase):
         rows = build_projection(user)
 
         self.assertEqual(rows[0].ef_target, D("240000.00"))
-        self.assertEqual(rows[0].bank_balance, D("240000.00"))
-        self.assertEqual(rows[0].swept_to_pool, D("820000.00"))
-        self.assertEqual(rows[0].pool_balance, D("820000.00"))
+        # Already well past the target, and nothing sweeps it back down.
+        self.assertEqual(rows[0].bank_balance, D("1060000.00"))
         self.assertEqual(rows[0].investment_balance, D("0.00"))
         self.assertTrue(rows[0].ef_goal_met)
 
-    def test_bank_fills_to_the_target_before_anything_sweeps(self):
+    def test_ef_goal_met_flips_true_once_the_balance_crosses_the_target_and_keeps_growing(self):
         user = make_user()
         make_planner(user, bank_balance_today=D("0"), ef_target_months=6)
         make_salary(user, amount="100000")
         make_expense(user, amount="40000")
         rows = build_projection(user)
 
-        # Target 240000, surplus 60000/month: months 1-3 stay under the cap.
+        # Target 240000, surplus 60000/month.
         self.assertEqual(rows[0].bank_balance, D("60000.00"))
-        self.assertEqual(rows[0].swept_to_pool, D("0.00"))
         self.assertEqual(rows[2].bank_balance, D("180000.00"))
         self.assertFalse(rows[2].ef_goal_met)
         self.assertEqual(rows[3].bank_balance, D("240000.00"))
         self.assertTrue(rows[3].ef_goal_met)
-        self.assertEqual(rows[4].swept_to_pool, D("60000.00"))
+        # No cap: month 5 keeps growing past the target rather than holding there.
+        self.assertEqual(rows[4].bank_balance, D("300000.00"))
+        self.assertTrue(rows[4].ef_goal_met)
 
-    def test_deficit_drains_the_bank_then_the_pool_then_goes_negative(self):
+    def test_deficit_makes_the_bank_go_negative_with_no_backstop(self):
         user = make_user()
-        make_planner(user, bank_balance_today=D("0"), ef_target_months=0,
-                     surplus_pool_today=D("100000"))
+        make_planner(user, bank_balance_today=D("0"), ef_target_months=0)
         make_salary(user, amount="20000")
         make_expense(user, amount="100000")
         make_holding(user, current_value=D("500000"), monthly_sip=D("0"),
                      expected_return_pct=D("0"))
         rows = build_projection(user)
 
-        self.assertEqual(rows[0].drawn_from_pool, D("80000.00"))
-        self.assertEqual(rows[0].pool_balance, D("20000.00"))
-        self.assertEqual(rows[0].bank_balance, D("0.00"))
-        self.assertFalse(rows[0].cash_shortfall)
-
-        # Month 2 exhausts the pool and the bank goes negative -- the month is
-        # flagged rather than being floored at zero.
-        self.assertEqual(rows[1].drawn_from_pool, D("20000.00"))
-        self.assertEqual(rows[1].pool_balance, D("0.00"))
-        self.assertEqual(rows[1].bank_balance, D("-60000.00"))
+        self.assertEqual(rows[0].bank_balance, D("-80000.00"))
+        self.assertTrue(rows[0].cash_shortfall)
+        self.assertEqual(rows[1].bank_balance, D("-160000.00"))
         self.assertTrue(rows[1].cash_shortfall)
 
         # Fund units are never sold, however deep the hole gets.
         for row in rows:
             self.assertEqual(row.investment_balance, D("500000.00"))
 
-    def test_investments_are_never_sold_even_with_an_empty_pool(self):
-        user = make_user()
-        make_planner(user, bank_balance_today=D("0"), ef_target_months=0,
-                     surplus_pool_today=D("0"))
-        make_salary(user, amount="20000")
-        make_expense(user, amount="100000")
-        make_holding(user, current_value=D("1000000"), monthly_sip=D("0"),
-                     expected_return_pct=D("0"))
-        rows = build_projection(user)
-
-        self.assertEqual(rows[0].drawn_from_pool, D("0.00"))
-        self.assertEqual(rows[0].bank_balance, D("-80000.00"))
-        self.assertTrue(rows[0].cash_shortfall)
-        self.assertEqual(rows[0].investment_balance, D("1000000.00"))
-
-    def test_the_pool_compounds_at_its_own_rate(self):
-        user = make_user()
-        make_planner(user, ef_target_months=0, surplus_pool_today=D("100000"),
-                     surplus_pool_return_pct=D("12"),
-                     default_investment_return_pct=D("24"))
-        make_holding(user, current_value=D("100000"), monthly_sip=D("0"),
-                     expected_return_pct=D("24"))
-        rows = build_projection(user)
-
-        # Pool at 1%/month, funds at 2%/month -- separate rates, not one pool.
-        self.assertEqual(rows[0].pool_balance, D("101000.00"))
-        self.assertEqual(rows[0].investment_balance, D("102000.00"))
-        self.assertEqual(rows[1].pool_balance, D("102010.00"))
-        self.assertEqual(rows[1].investment_balance, D("104040.00"))
-
     def test_bank_interest_is_credited_monthly(self):
         user = make_user()
-        # A fixed EF target well above the balance, so nothing sweeps out and
-        # the interest credit is the only thing moving.
+        # The EF target is irrelevant to the bank balance now -- it is purely
+        # informational, so set a big one to document that it changes nothing.
         make_planner(user, bank_balance_today=D("120000"), bank_interest_pct=D("12"),
                      ef_target_fixed_amount=D("500000"))
         make_salary(user, amount="0")
@@ -789,6 +892,7 @@ class BankAndSweepTests(TestCase):
 
         self.assertEqual(rows[0].bank_interest, D("1200.00"))
         self.assertEqual(rows[0].bank_balance, D("121200.00"))
+        self.assertFalse(rows[0].ef_goal_met)
 
 
 class HorizonTests(TestCase):
@@ -876,36 +980,6 @@ class CapitalVersusGrowthTests(TestCase):
         self.assertEqual(rows[0].invested_capital, D("100000.00"))
         self.assertEqual(rows[0].investment_gains, D("-1000.00"))
 
-    def test_pool_capital_is_what_was_swept_in(self):
-        user = make_user()
-        make_planner(user, ef_target_months=0, surplus_pool_return_pct=D("12"))
-        make_salary(user, amount="100000")
-        make_expense(user, amount="40000")
-        rows = build_projection(user)
-
-        # 60000 sweeps in monthly and the pool compounds at 1% a month.
-        self.assertEqual(rows[0].pool_capital, D("60000.00"))
-        self.assertEqual(rows[0].pool_gains, D("0.00"))
-        self.assertEqual(rows[1].pool_capital, D("120000.00"))
-        self.assertEqual(rows[1].pool_gains, D("600.00"))
-
-    def test_a_drawdown_eats_the_pools_gains_before_its_capital(self):
-        user = make_user()
-        make_planner(user, ef_target_months=0, bank_balance_today=D("0"),
-                     surplus_pool_today=D("100000"), surplus_pool_return_pct=D("12"))
-        make_salary(user, amount="20000")
-        make_expense(user, amount="21000")
-        rows = build_projection(user)
-
-        # Pool earns 1000, then 1000 is drawn to cover the deficit: the gains
-        # absorb it and the capital is untouched.
-        self.assertEqual(rows[0].pool_balance, D("100000.00"))
-        self.assertEqual(rows[0].pool_capital, D("100000.00"))
-        self.assertEqual(rows[0].pool_gains, D("0.00"))
-        # Capital can never exceed the balance it describes.
-        for row in rows:
-            self.assertLessEqual(row.pool_capital, row.pool_balance)
-
     def test_pf_capital_is_the_opening_corpus_plus_contributions(self):
         user = make_user()
         make_planner(user)
@@ -918,26 +992,19 @@ class CapitalVersusGrowthTests(TestCase):
         self.assertEqual(rows[0].pf_balance, D("525000.00"))
         self.assertEqual(rows[0].pf_gains, D("5000.00"))
 
-    def test_totals_add_up_across_all_three_balances(self):
+    def test_totals_add_up_across_both_balances(self):
         user = make_user()
-        make_planner(user, ef_target_months=0, surplus_pool_return_pct=D("6"))
+        make_planner(user, ef_target_months=0)
         make_salary(user, amount="100000")
         make_expense(user, amount="40000")
         make_holding(user, current_value=D("100000"), monthly_sip=D("10000"))
         make_pf(user, current_balance=D("200000"))
         row = build_projection(user)[11]
 
-        self.assertEqual(
-            row.total_capital,
-            row.invested_capital + row.pool_capital + row.pf_capital,
-        )
-        self.assertEqual(
-            row.total_gains,
-            row.investment_gains + row.pool_gains + row.pf_gains,
-        )
+        self.assertEqual(row.total_capital, row.invested_capital + row.pf_capital)
+        self.assertEqual(row.total_gains, row.investment_gains + row.pf_gains)
         # Balance is always capital plus growth, by construction.
         self.assertEqual(row.investment_balance, row.invested_capital + row.investment_gains)
-        self.assertEqual(row.pool_balance, row.pool_capital + row.pool_gains)
         self.assertEqual(row.pf_balance, row.pf_capital + row.pf_gains)
 
     def test_annual_rollup_carries_the_split(self):

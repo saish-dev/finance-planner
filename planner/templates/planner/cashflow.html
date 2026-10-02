@@ -66,7 +66,7 @@
 
             {% if show_income %}
               <th class="num">Salary{% info "The most recent salary change on or before this month. In years with no change entry, last month's salary grown by the default hike, applied only in the hike month." %}</th>
-              <th class="num">Bonus{% info "Any annual bonus or variable pay, charged in full in its payout month and zero in every other month." %}</th>
+              <th class="num">Bonus{% info "Any bonus or variable pay. Charged in full in its payout month, or split evenly across its payout window if one is set, and zero in every other month." %}</th>
             {% endif %}
             <th class="num">In{% info "Total inflow for the month: salary plus any bonus due. PF contributions are not here — your in-hand salary is already net of them." %}</th>
 
@@ -75,30 +75,30 @@
               <th class="num">Insurance{% info "The actual premium due this month, never smoothed. A yearly policy shows its full premium once a year and nothing in the other eleven months." %}</th>
               <th class="num">EMI{% info "Every loan's EMI for this month added together. Per-loan amounts are fixed month to month, so they live on each loan's own schedule page rather than as columns here. The final instalment of a loan is capped at whatever is actually left owing." %}</th>
               <th class="num">SIP{% info "All active SIPs added up. Each one steps up on its own fund's anniversary, not on a common date." %}</th>
+              <th class="num">One-time{% info "Any one-time expense due this month -- a single purchase, charged once, in full. Never smoothed and never part of the emergency-fund target." %}</th>
               <th class="num">PF in{% info "Employee plus employer contribution. Shown for information only — it is deliberately NOT part of Out, because your in-hand salary already excludes the employee half and the employer half never reaches your bank." %}</th>
             {% endif %}
-            <th class="num">Out{% info "Living expenses + insurance + EMIs + SIPs. PF contributions are excluded on purpose." %}</th>
+            <th class="num">Out{% info "Living expenses + insurance + EMIs + SIPs + one-time expenses. PF contributions are excluded on purpose." %}</th>
 
             <th class="num">Surplus{% info "In minus Out. This is what is left to build up the bank balance each month." %}</th>
 
             {% if show_balances %}
-              <th class="num">EF target{% info "Either your fixed emergency-fund amount, or N months of living expenses + insurance (at its monthly equivalent) + EMIs. The bank is held at this level." %}</th>
-              <th class="num">Bank{% info "Last month's balance plus interest plus the surplus, capped at the EF target. Anything above the cap sweeps into the surplus pool the same month." %}</th>
-              <th class="num">Pool{% info "Surplus swept off the top of the bank, compounding at the surplus pool rate. This is the only balance a deficit month can draw on after the bank." %}</th>
-              <th class="num">Invest{% info "Your funds only: last month's value grown at the blended return, plus this month's SIP. Swept surplus never lands here, and units are never sold to cover a shortfall." %}</th>
+              <th class="num">Bank{% info "Last month's balance plus interest plus this month's net surplus. Uncapped -- it just keeps accumulating. The EF badge next to the month marks when it first reaches the emergency-fund target, shown on Settings." %}</th>
+              <th class="num">Invest{% info "Your funds only: last month's value grown at the blended return, plus this month's SIP. Units are never sold to cover a shortfall." %}</th>
               <th class="num">PF{% info "The EPF corpus: last month's balance plus its interest plus this month's contributions. Counts towards net worth but is never spendable." %}</th>
               <th class="num">Loans{% info "Total principal still outstanding across every loan, after this month's EMI." %}</th>
             {% endif %}
 
-            <th class="num">Net worth{% info "Bank + surplus pool + investments + PF corpus, minus all loan principal outstanding." %}</th>
+            <th class="num">Net worth{% info "Bank + investments + PF corpus, minus all loan principal outstanding." %}</th>
           </tr>
         </thead>
         <tbody>
           {% for row in page_obj %}
-            <tr class="{% if row.cash_shortfall %}shortfall{% endif %}">
+            <tr class="{% if row.cash_shortfall %}shortfall{% endif %} {% if row.is_lumpy %}lumpy-row{% endif %}">
               <td class="sticky-col">
                 {{ row.month|month_label }}
                 {% if row.ef_goal_met %}<span class="pill yes" title="Emergency fund target met">EF</span>{% endif %}
+                {% if row.is_lumpy %}<span class="pill lumpy" title="Not a monthly cost -- due this month: {{ row.lumpy_items|join:", " }}">&#9650; extra</span>{% endif %}
               </td>
 
               {% if show_income %}
@@ -112,6 +112,7 @@
                 <td class="num">{% if row.insurance %}{{ row.insurance|inr }}{% else %}&mdash;{% endif %}</td>
                 <td class="num">{{ row.total_emi|inr }}</td>
                 <td class="num">{{ row.sip|inr }}</td>
+                <td class="num">{% if row.one_time_expense %}{{ row.one_time_expense|inr }}{% else %}&mdash;{% endif %}</td>
                 <td class="num derived">{% if row.pf_contribution %}{{ row.pf_contribution|inr }}{% else %}&mdash;{% endif %}</td>
               {% endif %}
               <td class="num">{{ row.total_outflow|inr }}</td>
@@ -119,10 +120,7 @@
               <td class="num {{ row.net_surplus|net_class }}">{{ row.net_surplus|inr }}</td>
 
               {% if show_balances %}
-                <td class="num derived">{{ row.ef_target|inr }}</td>
                 <td class="num {{ row.bank_balance|net_class }}">{{ row.bank_balance|inr }}</td>
-                <td class="num"
-                    {% if row.swept_to_pool %}title="{{ row.swept_to_pool|inr }} swept in this month"{% elif row.drawn_from_pool %}title="{{ row.drawn_from_pool|inr }} drawn out this month"{% endif %}>{{ row.pool_balance|inr }}</td>
                 <td class="num">{{ row.investment_balance|inr }}</td>
                 <td class="num">{{ row.pf_balance|inr }}</td>
                 <td class="num">{{ row.total_loan_balance|inr }}</td>
@@ -131,7 +129,7 @@
               <td class="num strong {{ row.net_worth|net_class }}">{{ row.net_worth|inr }}</td>
             </tr>
           {% empty %}
-            <tr><td class="empty" colspan="24">No months to show. Check your settings.</td></tr>
+            <tr><td class="empty" colspan="23">No months to show. Check your settings.</td></tr>
           {% endfor %}
         </tbody>
       </table>

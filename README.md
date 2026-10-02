@@ -2,12 +2,11 @@
 
 A Django app that replaces a multi-tab Excel cashflow model. Enter your income,
 expenses, loans, investments and insurance once; the app projects a
-month-by-month cashflow out to a year you choose, tracking five balances over
-time — bank (which doubles as the emergency fund), the surplus pool, your
-investments, the PF corpus, and each loan's outstanding principal — and rolls
-them into
+month-by-month cashflow out to a year you choose, tracking four balances over
+time — bank (which doubles as the emergency fund), your investments, the PF
+corpus, and each loan's outstanding principal — and rolls them into
 
-    Net worth = Bank + Surplus pool + Investments + PF corpus − Loans outstanding
+    Net worth = Bank + Investments + PF corpus − Loans outstanding
 
 The **Project to year** box on the dashboard re-renders everything for a new
 horizon without a page reload.
@@ -64,9 +63,18 @@ The chain, in order, per month:
 1. **Salary** — the most recent `SalaryChange` on or before this month;
    otherwise last month's, grown by the default hike in the designated hike
    month. The hike never fires in month 0.
-2. **Bonus** — each `IncomeExtra` in its payout month.
+2. **Bonus** — each `IncomeExtra` pays out in `payout_month`, or split evenly
+   across every month from there through `payout_end_month` if set. That
+   pattern repeats every year the bonus is active, bounded by its own real
+   `start_month`/`end_month` (blank start = already running, blank end =
+   forever) — separate from the month-of-year pattern, because a bonus is not
+   guaranteed to be the same every year indefinitely.
 3. **Living expenses** — inflating ones grow in 12-month steps from the
-   projection start; flat ones never move.
+   projection start; flat ones never move. An `Expense` may be monthly,
+   quarterly, half-yearly or yearly; a non-monthly one is charged in full in
+   the real month it falls due (`(month − due_month) % frequency_months == 0`),
+   never smoothed — it enters the emergency-fund target at a smoothed
+   monthly equivalent instead, so the target does not lurch.
 4. **Insurance** — the real premium in the real month it falls due
    (`(month − premium_month) % frequency_months == 0`), never smoothed.
 5. **Loans** — flat EMI while `start ≤ month ≤ last EMI month`, balance
@@ -74,24 +82,29 @@ The chain, in order, per month:
 6. **SIPs** — each stepped up from **that fund's own** `sip_start_month`, not
    from the global projection start.
 6b. **Retirement (EPF)** — sits *outside* the cashflow chain entirely. See below.
-7. **Net surplus** = inflow − (living + insurance + EMIs + SIPs).
-8. **EF target** = fixed amount, or `N × (living + insurance monthly-equivalent
+7. **One-time expenses** — a `OneTimeExpense` is a single purchase (a phone, a
+   trip): just a name, an amount and a month, added with `month == the row's
+   month`. No frequency, no inflation adjustment, and it never enters the EF
+   target — a one-off purchase is not an ongoing essential cost. Kept as its
+   own table and its own cashflow column, deliberately separate from the
+   recurring `Expense` model above.
+8. **Net surplus** = inflow − (living + insurance + EMIs + SIPs + one-time).
+9. **EF target** = fixed amount, or `N × (living + insurance monthly-equivalent
    + EMIs)`. Insurance enters here at its monthly equivalent, and only here, so
-   an annual premium does not make the target lurch.
-9. **Bank** — grows at `interest/12`, takes the surplus, and is **capped at the
-   EF target**; anything above sweeps into the surplus pool the same month.
-10. **Surplus pool** — the swept surplus, compounding at its own rate. This is
-    also the only thing a deficit month can draw on after the bank.
+   an annual premium does not make the target lurch. Purely a milestone: it
+   never caps or redirects anything below.
+10. **Bank** — grows at `interest/12`, then takes the whole net surplus,
+    uncapped. There is no sweep and no separate surplus pool: every rupee of
+    surplus just accumulates here, forever, even past the EF target.
 11. **Investments** — your funds. They receive SIPs and growth, and *nothing
-    else*: no sweep in, no sale out.
-12. **Net worth** = bank + pool + investments + PF corpus − total loan principal.
+    else*: never topped up from the bank, never sold to cover a shortfall.
+12. **Net worth** = bank + investments + PF corpus − total loan principal.
 
 ### Money put in vs money earned
 
-Investments, the surplus pool and the PF corpus each carry a `*_capital` and a
-`*_gains` figure, so `balance == capital + gains` always holds. Capital is
-what went in (opening value, then SIPs / sweeps / contributions); gains are the
-residual.
+Investments and the PF corpus each carry a `*_capital` and a `*_gains` figure,
+so `balance == capital + gains` always holds. Capital is what went in (opening
+value, then SIPs / contributions); gains are the residual.
 
 **Capital is measured from the projection start.** The app has no record of
 what you originally paid for a holding, so the value you already had on day one
@@ -99,28 +112,27 @@ counts as capital. These are therefore gains *over the projection*, not
 lifetime returns — a fund you bought at ₹1L and that is worth ₹5L today starts
 here as ₹5L of capital, not ₹1L of capital and ₹4L of gains.
 
-A pool drawdown eats gains before capital (`capital = min(capital, balance)`),
-so capital can never exceed the balance it describes. Investment gains *can* go
-negative, and are shown in red when they do, since a holding with a negative
-expected return should look like a loss rather than be clamped at zero.
+Investment gains *can* go negative, and are shown in red when they do, since a
+holding with a negative expected return should look like a loss rather than be
+clamped at zero.
 
-### Four balances, four jobs
+### Three balances, three jobs
 
 | Balance | Receives | Compounds at | Can be spent? |
 |---|---|---|---|
-| Bank | surplus, interest | bank rate | yes — first |
-| Surplus pool | sweep off the bank cap | pool rate | yes — second, and only after the bank |
+| Bank | surplus, interest | bank rate | yes — the only one that ever is |
 | Investments | SIPs only | blended fund return | **never sold** |
 | PF corpus | contributions | its own rate | **never sold** |
 
-Swept surplus deliberately does **not** land in `investments`. Money you never
-chose to buy units with should not compound at your funds' blended return, and
-labelling it "investments" overstates what you actually hold. It earns the
-`surplus_pool_return_pct` from Settings instead — roughly a liquid fund.
+There is no cap and no separate surplus pool: every rupee of net surplus lands
+in the bank and stays there, growing at the bank rate, whether or not it has
+already passed the emergency-fund target. The target is shown purely as a
+milestone (`ef_goal_met`) — nothing is ever moved because of it.
 
-The consequence is that a deficit past the pool shows up as a **negative bank
+The consequence is that a deficit shows up immediately as a **negative bank
 balance**, flagged in red, rather than being papered over by silently selling
-SIP units. That is the point: a month the plan cannot fund should look like one.
+SIP units or drawing on some other buffer. That is the point: a month the plan
+cannot fund should look like one.
 
 ### Why PF is not an investment holding
 
@@ -133,11 +145,11 @@ a flag, because PF breaks two assumptions the investment path is built on:
   surplus — would deduct the employee half a second time and invent an outflow
   for the employer half that never happened. So the PF columns are recorded and
   displayed, but never enter `total_outflow`.
-- **It must not be spendable.** On a deficit month the engine drains the bank
-  and then the surplus pool. EPF cannot be sold to pay rent, so the corpus is
-  never offered to the drawdown, and it never counts towards the emergency fund
-  target. A shortfall still shows as a shortfall with ₹50 lakh sitting in PF —
-  which is the honest answer.
+- **It must not be spendable.** On a deficit month the bank balance simply goes
+  negative. EPF cannot be sold to pay rent, so the corpus is never offered up
+  to cover it, and it never counts towards the emergency fund target. A
+  shortfall still shows as a shortfall with ₹50 lakh sitting in PF — which is
+  the honest answer.
 
 Contributions **track your salary**: you enter today's rupee amount, and it
 moves in the same proportion as your pay, whether that comes from a
@@ -185,12 +197,13 @@ half-entered row can't break the projection.)
   a flat EMI in the payoff month and floored the balance at zero, which spends
   money that was never due. Here the cashflow column and the balance column
   agree.
-- **The bank may go negative.** If a month's deficit exhausts both the bank and
-  the surplus pool, the balance goes negative and the row is flagged (red in the
-  cashflow table, a banner on the dashboard) rather than being quietly floored
-  at zero. A month the plan cannot fund is exactly what you want to see.
-- **An opening balance above the EF target sweeps in month 0**, the same rule as
-  every other month.
+- **The bank may go negative.** If a month's outflow exceeds the surplus and
+  whatever is already in the bank, the balance goes negative and the row is
+  flagged (red in the cashflow table, a banner on the dashboard) rather than
+  being quietly floored at zero or covered from anywhere else. A month the
+  plan cannot fund is exactly what you want to see.
+- **The bank is never capped.** Once it passes the emergency-fund target it
+  just keeps growing — the target is a milestone, not a ceiling.
 - **Blended investment return is computed once** from today's values and held
   constant, matching the spreadsheet. Re-weighting it monthly would move the
   30-year figure by a few percent and make it uncheckable by hand. Noted in
@@ -241,7 +254,7 @@ sit inside a horizontally scrolling container that would clip one drawn upward.
 | `/` | Headline cards, net-worth line chart, annual-surplus bars, the year control |
 | `/settings/` | Start month, horizon, inflation, hike, bank, return, EF target |
 | `/income/` | Salary change table (any order) + bonus streams |
-| `/expenses/` | Living expenses, with a per-row inflates toggle |
+| `/expenses/` | Living expenses (monthly/quarterly/half-yearly/yearly, with an inflates toggle) plus a separate one-time expenses table for single purchases |
 | `/loans/` | Any number of loans; derived columns shown greyed next to your inputs |
 | `/loans/<id>/` | Month-by-month amortisation + balance chart |
 | `/investments/` | Holdings, each with its own SIP window, step-up and return |
@@ -252,17 +265,19 @@ sit inside a horizontally scrolling container that would clip one drawn upward.
 
 ## Testing
 
-104 tests. `test_projection.py` hand-calculates every column of a small scenario
+111 tests. `test_projection.py` hand-calculates every column of a small scenario
 (the numbers are in the docstring, so you can check them on paper), then checks
 months 3, 12 and 24 against closed-form annuity formulas. After that it covers
 the cases most likely to hide off-by-one-month bugs: a mid-projection salary
 change, the default hike landing only in its month, an `end_month_override`, a
 SIP starting mid-projection with a step-up anchored to its own start, quarterly
-and half-yearly premiums, inflation stepping every 12 months, the EF sweep, and
-a deficit draining the bank then the portfolio. The retirement tests pin down
-the two rules that are easy to get wrong: contributions never reduce the
-surplus, and the corpus is never sold to cover a shortfall. `test_views.py` covers every
-page, the CSV export, the HTMX row round-trip, and each validation rule.
+and half-yearly premiums, inflation stepping every 12 months, a bonus split
+across a chosen month range (including wrapping across the calendar year), a
+one-time expense in its own month, and a deficit taking the bank negative with
+no backstop. The retirement tests pin down the two rules that are easy to get
+wrong: contributions never reduce the surplus, and the corpus is never sold to
+cover a shortfall. `test_views.py` covers every page, the CSV export, the HTMX
+row round-trip, and each validation rule.
 
 ## Not built (from the brief's "nice to haves")
 

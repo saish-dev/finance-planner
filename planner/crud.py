@@ -19,6 +19,7 @@ from .forms import (
     InsurancePolicyForm,
     InvestmentHoldingForm,
     LoanForm,
+    OneTimeExpenseForm,
     RetirementAccountForm,
     SalaryChangeForm,
 )
@@ -28,6 +29,7 @@ from .models import (
     InsurancePolicy,
     InvestmentHolding,
     Loan,
+    OneTimeExpense,
     RetirementAccount,
     SalaryChange,
 )
@@ -191,6 +193,18 @@ def _policy_warnings(policy, ctx):
     return warnings
 
 
+def _bonus_window(extra, ctx):
+    start = format_month(extra.start_month) if extra.start_month else "already running"
+    end = format_month(extra.end_month) if extra.end_month else "ongoing"
+    return f"{start} - {end}"
+
+
+def _bonus_warnings(extra, ctx):
+    if not extra.end_month:
+        return ["No end month: this amount repeats every year for the whole projection."]
+    return []
+
+
 CONFIGS: dict[str, CrudConfig] = {
     "salary": CrudConfig(
         slug="salary",
@@ -216,11 +230,23 @@ CONFIGS: dict[str, CrudConfig] = {
         plural="Bonus and variable pay",
         page="income",
         order_by=("payout_month",),
-        note="Paid once a year, in the month you choose.",
+        note="Paid once a year by default. Set 'Split through' to divide the amount evenly "
+             "across every month from 'Paid in' through there instead -- e.g. June to March "
+             "pays it out in 10 equal parts. That pattern repeats every year the bonus is "
+             "active -- set 'Starts in' / 'Ends in' if it isn't the same amount forever.",
+        row_warnings=_bonus_warnings,
         columns=[
             Column("Label", TEXT, lambda o, c: o.label),
             Column("Annual amount", MONEY, lambda o, c: o.annual_amount),
             Column("Paid in", TEXT, lambda o, c: o.get_payout_month_display()),
+            Column("Split through", TEXT,
+                   lambda o, c: o.get_payout_end_month_display() if o.payout_end_month else "—"),
+            Column("Active window", TEXT, _bonus_window, derived=True,
+                   info="When this bonus applies. Blank 'Starts in' means already running at "
+                        "the projection start; blank 'Ends in' means it repeats every year "
+                        "for the whole projection."),
+            Column("Per month paid", MONEY, lambda o, c: o.installment_amount, derived=True,
+                   info="Annual amount divided across however many months it pays out over."),
         ],
     ),
     "expense": CrudConfig(
@@ -232,17 +258,42 @@ CONFIGS: dict[str, CrudConfig] = {
         page="expenses",
         order_by=("name",),
         note="Living costs only. EMIs, SIPs and insurance premiums have their own pages "
-             "and their own cashflow columns, so adding them here would double-count them.",
+             "and their own cashflow columns, so adding them here would double-count them. "
+             "A yearly, half-yearly or quarterly expense hits the cashflow in full in its real "
+             "month, exactly like an insurance premium -- it is never smoothed across the year.",
         columns=[
             Column("Name", TEXT, lambda o, c: o.name),
-            Column("Monthly", MONEY, lambda o, c: o.monthly_amount),
+            Column("Amount", MONEY, lambda o, c: o.amount,
+                   info="Charged in full each time this expense falls due -- not a monthly figure."),
+            Column("Frequency", TEXT, lambda o, c: o.get_frequency_display()),
+            Column("Due in", TEXT, lambda o, c: o.get_due_month_display()),
             Column("Inflates?", BOOL, lambda o, c: o.inflates),
+            Column("Cost a year", MONEY, lambda o, c: o.annual_cost, derived=True,
+                   info="Amount multiplied by payments per year. One twelfth of this sizes the "
+                        "emergency fund; the cashflow still charges the real amount in its real month."),
             Column("In 10 years", MONEY,
-                   lambda o, c: (o.monthly_amount * (1 + Decimal(c["inflation_pct"]) / 100) ** 10)
-                   if o.inflates else o.monthly_amount,
+                   lambda o, c: (o.annual_cost * (1 + Decimal(c["inflation_pct"]) / 100) ** 10)
+                   if o.inflates else o.annual_cost,
                    derived=True,
-                   info="Today's amount compounded at the planner's inflation rate for ten "
-                        "years. Flat expenses are unchanged."),
+                   info="This year's annual cost compounded at the planner's inflation rate for "
+                        "ten years. Flat expenses are unchanged."),
+        ],
+    ),
+    "onetime": CrudConfig(
+        slug="onetime",
+        model=OneTimeExpense,
+        form_class=OneTimeExpenseForm,
+        singular="One-time expense",
+        plural="One-time expenses",
+        page="expenses",
+        order_by=("-month", "name"),
+        note="A single purchase or one-off cost -- a phone, a trip, a repair. Charged in full "
+             "in the month you pick, once, with no frequency and no inflation adjustment. Not "
+             "counted towards the emergency-fund target.",
+        columns=[
+            Column("Name", TEXT, lambda o, c: o.name),
+            Column("Amount", MONEY, lambda o, c: o.amount),
+            Column("Month", MONTH, lambda o, c: o.month),
         ],
     ),
     "loan": CrudConfig(
@@ -362,7 +413,7 @@ CONFIGS: dict[str, CrudConfig] = {
 
 PAGE_TABLES: dict[str, list[str]] = {
     "income": ["salary", "bonus"],
-    "expenses": ["expense"],
+    "expenses": ["expense", "onetime"],
     "loans": ["loan"],
     "investments": ["investment"],
     "retirement": ["retirement"],

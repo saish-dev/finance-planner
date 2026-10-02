@@ -49,9 +49,9 @@
     </fieldset>
 
     <fieldset>
-      <legend>Bank, surplus pool and emergency fund</legend>
+      <legend>Bank and emergency fund</legend>
       <div class="form-grid">
-        {% for field in form %}{% if field.name in "bank_balance_today,bank_interest_pct,surplus_pool_today,surplus_pool_return_pct,ef_target_months,ef_target_fixed_amount" %}
+        {% for field in form %}{% if field.name in "bank_balance_today,bank_interest_pct,ef_target_months,ef_target_fixed_amount" %}
           <label class="field {% if field.errors %}has-error{% endif %}">
             <span class="field-label">{{ field.label }}</span>
             {{ field }}
@@ -61,10 +61,10 @@
         {% endif %}{% endfor %}
       </div>
       <p class="note">
-        The bank balance doubles as the emergency fund. Anything above the target sweeps into the
-        surplus pool the same month &mdash; kept separate from your funds, because money you did not
-        choose to buy units with should not compound at your funds' return. A deficit is drawn from
-        the bank first and then from the pool; fund units are never sold.
+        Every rupee of net surplus simply accumulates in the bank balance, uncapped, with interest.
+        The emergency fund target is shown as a milestone against that balance only &mdash; nothing
+        is ever moved out of it or drawn from anywhere else. A deficit month just shows the balance
+        going negative; fund units are never sold to cover it.
       </p>
     </fieldset>
 

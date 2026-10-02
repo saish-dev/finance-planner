@@ -23,7 +23,6 @@
       bank: cssVar("--series-3", "#1baf7a"),
       loans: cssVar("--series-4", "#eda100"),
       pf: cssVar("--series-5", "#e87ba4"),
-      pool: cssVar("--series-6", "#008300"),
       positive: cssVar("--series-1", "#2a78d6"),
       negative: cssVar("--polarity-negative", "#e34948"),
       grid: cssVar("--grid", "#e1e0d9"),
@@ -163,7 +162,6 @@
             line("Bank", data.bank, colors.bank),
             line("Loans left", data.loans, colors.loans),
             line("PF corpus", data.pf, colors.pf),
-            line("Surplus pool", data.pool, colors.pool),
           ],
         },
         options: {

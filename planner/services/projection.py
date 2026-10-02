@@ -8,13 +8,19 @@ data, which is why deleting a loan or a fund can never corrupt history.
 
 Column order per month (each step may depend on the ones above it):
 
-    1  salary            8  emergency-fund target
-    2  bonus             9  bank balance  (capped at the EF target)
-    3  living expenses  10  investments   (+ sweep-in / - draw-down)
-    4  insurance        11  net worth
+    1  salary            9  emergency-fund target (informational only)
+    2  bonus            10  bank balance   (every rupee of surplus, uncapped)
+    3  living expenses  11  investments    (SIPs + growth only)
+    4  insurance        12  net worth
     5  loan EMIs + balances
     6  SIPs
-    7  net surplus
+    7  one-time expenses
+    8  net surplus
+
+There is no sweep and no separate surplus pool: net surplus simply
+accumulates in the bank balance, forever. The emergency-fund target is shown
+purely as a milestone -- `ef_goal_met` reports whether the balance has
+reached it, and nothing is ever moved out of the bank because of it.
 
 Retirement (EPF) sits outside that chain on purpose -- see `_pf_plans`.
 """
@@ -32,6 +38,7 @@ from ..models import (
     InsurancePolicy,
     InvestmentHolding,
     Loan,
+    OneTimeExpense,
     PlannerSettings,
     RetirementAccount,
     SalaryChange,
@@ -58,6 +65,16 @@ class LoanMonth:
 
 
 @dataclass
+class LumpyItem:
+    """A non-monthly expense or premium that actually charged this month."""
+    name: str
+    amount: Decimal
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@dataclass
 class MonthRow:
     """Every column the UI needs for a single month."""
     index: int
@@ -71,7 +88,17 @@ class MonthRow:
     insurance: Decimal = ZERO
     total_emi: Decimal = ZERO
     sip: Decimal = ZERO
+    one_time_expense: Decimal = ZERO
     total_outflow: Decimal = ZERO
+
+    # Any non-monthly expense or insurance premium that actually charged this
+    # month, so the UI can flag a spike instead of leaving it to be spotted
+    # by eye in a scrolling column of numbers.
+    lumpy_items: list[LumpyItem] = field(default_factory=list)
+
+    @property
+    def is_lumpy(self) -> bool:
+        return bool(self.lumpy_items)
 
     net_surplus: Decimal = ZERO
 
@@ -87,18 +114,14 @@ class MonthRow:
     pf_growth: Decimal = ZERO
     pf_balance: Decimal = ZERO
 
+    # Informational milestone only -- reaching it moves nothing. Net surplus
+    # always accumulates straight into the bank balance below.
     ef_target: Decimal = ZERO
     ef_goal_met: bool = False
 
     bank_interest: Decimal = ZERO
     bank_balance: Decimal = ZERO
-    swept_to_pool: Decimal = ZERO
-    drawn_from_pool: Decimal = ZERO
     cash_shortfall: bool = False
-
-    # Swept surplus lives here, not in the funds -- see step 9/10.
-    pool_growth: Decimal = ZERO
-    pool_balance: Decimal = ZERO
 
     investment_growth: Decimal = ZERO
     investment_balance: Decimal = ZERO
@@ -110,18 +133,16 @@ class MonthRow:
     # lifetime returns.
     invested_capital: Decimal = ZERO
     investment_gains: Decimal = ZERO
-    pool_capital: Decimal = ZERO
-    pool_gains: Decimal = ZERO
     pf_capital: Decimal = ZERO
     pf_gains: Decimal = ZERO
 
     @property
     def total_capital(self) -> Decimal:
-        return self.invested_capital + self.pool_capital + self.pf_capital
+        return self.invested_capital + self.pf_capital
 
     @property
     def total_gains(self) -> Decimal:
-        return self.investment_gains + self.pool_gains + self.pf_gains
+        return self.investment_gains + self.pf_gains
 
     net_worth: Decimal = ZERO
 
@@ -253,6 +274,32 @@ def _sip_plans(holdings, start: dt.date) -> list[_SipPlan]:
 
 
 @dataclass
+class _BonusPlan:
+    """A bonus/variable-pay stream reduced to what the monthly loop needs."""
+    months: tuple[int, ...]
+    amount_per_month: Decimal
+    start: dt.date
+    end: dt.date | None
+
+    def amount_for(self, month: dt.date) -> Decimal:
+        if month < self.start or (self.end and month > self.end):
+            return DEC0
+        return self.amount_per_month if month.month in self.months else DEC0
+
+
+def _bonus_plans(extras, start: dt.date) -> list[_BonusPlan]:
+    return [
+        _BonusPlan(
+            months=tuple(e.installment_months()),
+            amount_per_month=Decimal(e.annual_amount) / e.installment_count,
+            start=e.effective_start(start),
+            end=e.end_month,
+        )
+        for e in extras
+    ]
+
+
+@dataclass
 class _PfPlan:
     """A retirement account reduced to what the monthly loop needs.
 
@@ -326,6 +373,27 @@ def blended_return_pct(holdings, default_pct: Decimal) -> Decimal:
         )
         return weighted / total_sip
     return Decimal(default_pct)
+
+
+def _expense_due(expense: Expense, month: dt.date, inflation_factor: Decimal) -> Decimal:
+    """The real charge this month -- never smoothed across months.
+
+    Mirrors `_premium_due` below: a monthly expense (frequency_months == 1)
+    matches every month, exactly as before this field existed. A yearly,
+    half-yearly or quarterly one only matches its due month and its repeats.
+    """
+    if (month.month - expense.due_month) % expense.frequency_months != 0:
+        return DEC0
+    amount = Decimal(expense.amount)
+    return amount * inflation_factor if expense.inflates else amount
+
+
+def _expense_monthly_equivalent(expense: Expense, inflation_factor: Decimal) -> Decimal:
+    """Smoothed monthly cost -- sizes the emergency fund only, same idea as
+    an insurance policy's `monthly_equivalent`, so a lumpy expense does not
+    make the EF target lurch in the one month it actually falls due."""
+    equiv = expense.annual_cost / Decimal("12")
+    return equiv * inflation_factor if expense.inflates else equiv
 
 
 def _premium_due(policy: InsurancePolicy, month: dt.date, planner_start: dt.date) -> Decimal:
@@ -429,16 +497,18 @@ def build_projection(user, upto_year: int | None = None) -> list[MonthRow]:
 
     salary_changes = list(SalaryChange.objects.filter(user=user).order_by("effective_month"))
     salaries = _salary_series(planner, salary_changes, months, start)
-    extras = list(IncomeExtra.objects.filter(user=user))
+    bonus_plans = _bonus_plans(IncomeExtra.objects.filter(user=user), start)
     expenses = list(Expense.objects.filter(user=user))
     policies = list(InsurancePolicy.objects.filter(user=user))
+    one_time_by_month: dict[dt.date, list[OneTimeExpense]] = {}
+    for ote in OneTimeExpense.objects.filter(user=user):
+        one_time_by_month.setdefault(ote.month, []).append(ote)
     loan_plans = _loan_plans(Loan.objects.filter(user=user), start)
     holdings = list(InvestmentHolding.objects.filter(user=user))
     sip_plans = _sip_plans(holdings, start)
     pf_plans = _pf_plans(RetirementAccount.objects.filter(user=user), start, salaries)
 
     bank_rate = monthly_rate(planner.bank_interest_pct)
-    pool_rate = monthly_rate(planner.surplus_pool_return_pct)
     invest_rate = monthly_rate(blended_return_pct(holdings, Decimal(planner.default_investment_return_pct)))
     ef_months = Decimal(planner.ef_target_months or 0)
     ef_fixed = Decimal(planner.ef_target_fixed_amount) if planner.ef_target_fixed_amount is not None else None
@@ -447,12 +517,10 @@ def build_projection(user, upto_year: int | None = None) -> list[MonthRow]:
     # Running state. All Decimal, quantised to paise each month so the numbers
     # are reproducible and hand-checkable rather than drifting on long chains.
     bank = q2(Decimal(planner.bank_balance_today))
-    pool = q2(Decimal(planner.surplus_pool_today))
     investments = q2(sum((Decimal(h.current_value or 0) for h in holdings), DEC0))
 
     # Capital put in, tracked alongside each balance so growth is the residual.
     invested_capital = investments
-    pool_capital = pool
     pf_balances = {plan.account_id: q2(plan.opening_balance) for plan in pf_plans}
     pf_capital = q2(sum(pf_balances.values(), DEC0))
     loan_balances = {plan.loan_id: DEC0 for plan in loan_plans}
@@ -465,22 +533,37 @@ def build_projection(user, upto_year: int | None = None) -> list[MonthRow]:
         # 1. Salary (walked ahead of the loop in _salary_series).
         row.salary = salaries[month]
 
-        # 2. Bonus / variable pay.
-        row.bonus = q2(sum((Decimal(e.annual_amount) for e in extras if e.payout_month == month.month), DEC0))
+        # 2. Bonus / variable pay. A bonus with an "Ends in" month splits its
+        #    annual amount evenly across every month from "Starts in" through
+        #    there, repeating every year -- a single payout month is just the
+        #    one-month case of the same rule.
+        row.bonus = q2(sum((plan.amount_for(month) for plan in bonus_plans), DEC0))
         row.total_inflow = q2(row.salary + row.bonus)
 
         # 3. Living expenses: inflating ones grow in 12-month steps from the
-        #    projection start, flat ones never move.
+        #    projection start, flat ones never move. A yearly, half-yearly or
+        #    quarterly expense is charged in full in its real month only --
+        #    never smoothed across the months in between.
         elapsed_years = years_elapsed(month, start)
         inflation_factor = growth_factor(planner.expense_inflation_pct, elapsed_years)
         living = DEC0
+        lumpy_items: list[LumpyItem] = []
         for expense in expenses:
-            amount = Decimal(expense.monthly_amount)
-            living += amount * inflation_factor if expense.inflates else amount
+            due = q2(_expense_due(expense, month, inflation_factor))
+            living += due
+            if due and expense.frequency_months > 1:
+                lumpy_items.append(LumpyItem(name=expense.name, amount=due))
         row.living_expenses = q2(living)
 
         # 4. Insurance: the real premium in the real month.
-        row.insurance = q2(sum((_premium_due(p, month, start) for p in policies), DEC0))
+        insurance_due = DEC0
+        for policy in policies:
+            premium = q2(_premium_due(policy, month, start))
+            insurance_due += premium
+            if premium and policy.frequency_months > 1:
+                lumpy_items.append(LumpyItem(name=policy.name, amount=premium))
+        row.insurance = q2(insurance_due)
+        row.lumpy_items = lumpy_items
 
         # 5. Loans: flat EMI inside the window, balance amortised monthly.
         total_emi = DEC0
@@ -550,61 +633,52 @@ def build_projection(user, upto_year: int | None = None) -> list[MonthRow]:
         row.pf_capital = pf_capital
         row.pf_gains = q2(row.pf_balance - pf_capital)
 
-        # 7. Net surplus.
-        row.total_outflow = q2(row.living_expenses + row.insurance + row.total_emi + row.sip)
+        # 7. One-time expenses: a single purchase, charged in full in its own
+        #    month, never repeated -- and, like a one-off, never counted
+        #    towards the emergency-fund target below.
+        one_time_total = DEC0
+        for ote in one_time_by_month.get(month, []):
+            amount = q2(Decimal(ote.amount))
+            one_time_total += amount
+            lumpy_items.append(LumpyItem(name=ote.name, amount=amount))
+        row.one_time_expense = q2(one_time_total)
+
+        # 8. Net surplus.
+        row.total_outflow = q2(
+            row.living_expenses + row.insurance + row.total_emi + row.sip + row.one_time_expense
+        )
         row.net_surplus = q2(row.total_inflow - row.total_outflow)
 
-        # 8. Emergency fund target: fixed if given, else N months of essential
-        #    spending. Insurance enters at its monthly equivalent here (and
-        #    only here) so a yearly premium does not make the target lurch.
+        # 9. Emergency fund target: fixed if given, else N months of essential
+        #    spending. Insurance and any non-monthly expense enter at their
+        #    monthly equivalent here (and only here) so a yearly charge does
+        #    not make the target lurch in the one month it actually lands.
+        #    One-time expenses never enter this at all -- a single purchase
+        #    is not an ongoing essential cost.
         if ef_fixed is not None:
             row.ef_target = q2(ef_fixed)
         else:
-            row.ef_target = q2(ef_months * (row.living_expenses + insurance_monthly_equiv + row.total_emi))
+            expenses_equiv = sum(
+                (_expense_monthly_equivalent(e, inflation_factor) for e in expenses), DEC0
+            )
+            row.ef_target = q2(ef_months * (expenses_equiv + insurance_monthly_equiv + row.total_emi))
 
-        # 9/10. Bank, the surplus pool, and investments.
-        #
-        # Three balances, each with a distinct job:
-        #   bank        the emergency fund, held at exactly the EF target
-        #   pool        surplus swept off the top of the bank, un-earmarked
-        #   investments your actual funds -- SIPs and growth ONLY
-        #
-        # Swept surplus deliberately does not land in `investments`: money you
-        # did not choose to buy units with should not compound at the funds'
-        # blended return, and calling it "investments" would overstate what you
-        # actually hold. It earns the pool rate instead.
+        # 10. Bank. Every rupee of net surplus simply accumulates here, with
+        #    interest, for good -- there is no cap and nowhere else for it to
+        #    go. A deficit is never covered from anywhere: the balance just
+        #    goes negative and the month is flagged, because a month the plan
+        #    cannot fund is exactly what needs to be visible.
         row.bank_interest = q2(bank * bank_rate) if bank > 0 else ZERO
-        bank_pre = q2(bank + row.bank_interest + row.net_surplus)
+        bank = q2(bank + row.bank_interest + row.net_surplus)
+        row.bank_balance = bank
+        row.cash_shortfall = bank < 0
+        row.ef_goal_met = bank >= row.ef_target
 
-        row.pool_growth = q2(pool * pool_rate)
-        pool_pre = q2(pool + row.pool_growth)
-
+        # 11. Investments: your actual funds -- SIPs and growth ONLY. Never
+        #     topped up from the bank and never sold to cover a shortfall.
         row.investment_growth = q2(investments * invest_rate)
         investments = q2(investments + row.investment_growth + row.sip)
-
-        if bank_pre > row.ef_target:
-            # Anything above the emergency fund cap sweeps into the pool.
-            row.swept_to_pool = q2(bank_pre - row.ef_target)
-            bank = row.ef_target
-            pool = q2(pool_pre + row.swept_to_pool)
-        elif bank_pre < 0:
-            # A deficit the bank could not absorb draws on the pool -- and only
-            # the pool. Fund units are never sold: if the pool runs dry the
-            # bank goes negative and the row is flagged, because a month the
-            # plan cannot fund is exactly what needs to be visible.
-            drawn = min(-bank_pre, max(pool_pre, DEC0))
-            row.drawn_from_pool = q2(drawn)
-            pool = q2(pool_pre - drawn)
-            bank = q2(bank_pre + drawn)
-            row.cash_shortfall = bank < 0
-        else:
-            bank = bank_pre
-            pool = pool_pre
-
-        row.bank_balance = bank
-        row.pool_balance = pool
         row.investment_balance = investments
-        row.ef_goal_met = bank >= row.ef_target
 
         # Capital in each balance, so the rest of it is growth. Investments
         # only ever receive SIPs, so their capital just accumulates.
@@ -612,16 +686,10 @@ def build_projection(user, upto_year: int | None = None) -> list[MonthRow]:
         row.invested_capital = invested_capital
         row.investment_gains = q2(investments - invested_capital)
 
-        # The pool can be drawn on, and a drawdown eats gains before capital:
-        # clamping capital to the balance expresses exactly that.
-        pool_capital = min(q2(pool_capital + row.swept_to_pool), pool)
-        row.pool_capital = pool_capital
-        row.pool_gains = q2(pool - pool_capital)
-
-        # 11. Net worth. The PF corpus counts towards it, but note that it was
-        #     never offered to the sweep, the drawdown or the EF target above:
-        #     it is locked money, not a buffer.
-        row.net_worth = q2(bank + pool + investments + row.pf_balance - row.total_loan_balance)
+        # 12. Net worth. The PF corpus counts towards it, but note that it was
+        #     never offered up to cover a shortfall above: it is locked money,
+        #     not a buffer.
+        row.net_worth = q2(bank + investments + row.pf_balance - row.total_loan_balance)
 
         rows.append(row)
 
@@ -642,10 +710,9 @@ class YearRow:
     insurance: Decimal
     emi: Decimal
     sip: Decimal
+    one_time_expense: Decimal
     pf_contribution: Decimal
-    swept_to_pool: Decimal
     bank_balance: Decimal
-    pool_balance: Decimal
     investment_balance: Decimal
     pf_balance: Decimal
     total_loan_balance: Decimal
@@ -654,8 +721,6 @@ class YearRow:
     # Year-end split of each growing balance into money in vs money earned.
     invested_capital: Decimal = ZERO
     investment_gains: Decimal = ZERO
-    pool_capital: Decimal = ZERO
-    pool_gains: Decimal = ZERO
     pf_capital: Decimal = ZERO
     pf_gains: Decimal = ZERO
 
@@ -680,10 +745,9 @@ def annual_rollup(rows: list[MonthRow]) -> list[YearRow]:
                 insurance=q2(sum((m.insurance for m in months), DEC0)),
                 emi=q2(sum((m.total_emi for m in months), DEC0)),
                 sip=q2(sum((m.sip for m in months), DEC0)),
+                one_time_expense=q2(sum((m.one_time_expense for m in months), DEC0)),
                 pf_contribution=q2(sum((m.pf_contribution for m in months), DEC0)),
-                swept_to_pool=q2(sum((m.swept_to_pool for m in months), DEC0)),
                 bank_balance=last.bank_balance,
-                pool_balance=last.pool_balance,
                 investment_balance=last.investment_balance,
                 pf_balance=last.pf_balance,
                 total_loan_balance=last.total_loan_balance,
@@ -691,8 +755,6 @@ def annual_rollup(rows: list[MonthRow]) -> list[YearRow]:
                 months=len(months),
                 invested_capital=last.invested_capital,
                 investment_gains=last.investment_gains,
-                pool_capital=last.pool_capital,
-                pool_gains=last.pool_gains,
                 pf_capital=last.pf_capital,
                 pf_gains=last.pf_gains,
             )
@@ -710,8 +772,6 @@ class ProjectionSummary:
     opening_loan_balance: Decimal = ZERO
     lowest_surplus: Decimal = ZERO
     lowest_surplus_month: dt.date | None = None
-    total_swept: Decimal = ZERO
-    total_drawn: Decimal = ZERO
     shortfall_months: int = 0
     first_shortfall_month: dt.date | None = None
     has_loans: bool = False
@@ -724,8 +784,6 @@ def summarise(rows: list[MonthRow]) -> ProjectionSummary:
     summary = ProjectionSummary(first=rows[0], last=rows[-1])
     summary.opening_loan_balance = rows[0].total_loan_balance
     summary.has_loans = any(row.loans for row in rows)
-    summary.total_swept = q2(sum((row.swept_to_pool for row in rows), DEC0))
-    summary.total_drawn = q2(sum((row.drawn_from_pool for row in rows), DEC0))
 
     for row in rows:
         if summary.ef_reached_month is None and row.ef_goal_met:

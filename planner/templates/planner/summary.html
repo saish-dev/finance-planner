@@ -39,15 +39,15 @@
               <th class="num">Insurance{% info "Premiums actually charged during the year, in the months they fall due." %}</th>
               <th class="num">EMIs{% info "Every loan's EMI, totalled across the year." %}</th>
               <th class="num">SIPs{% info "All SIP contributions for the year, including each fund's own step-ups." %}</th>
+              <th class="num">One-time{% info "One-time expenses charged during the year -- single purchases, each in their own month." %}</th>
             {% endif %}
-            <th class="num">Out{% info "Living expenses + insurance + EMIs + SIPs for the year. PF contributions are excluded — your in-hand salary is already net of them." %}</th>
+            <th class="num">Out{% info "Living expenses + insurance + EMIs + SIPs + one-time expenses for the year. PF contributions are excluded — your in-hand salary is already net of them." %}</th>
             <th class="num">Surplus{% info "In minus Out for the year. Not the change in net worth: it excludes investment growth, loan principal repaid and PF." %}</th>
-            <th class="num">Bank{% info "Balance at the year end, held at the emergency-fund target once it is reached." %}</th>
-            <th class="num">Surplus pool{% info "Balance at the year end. Surplus swept off the bank cap, compounding at the pool rate." %}</th>
-            <th class="num">Investments{% info "Fund value at the year end: SIPs plus growth at the blended return. Swept surplus never lands here." %}</th>
+            <th class="num">Bank{% info "Balance at the year end -- every rupee of net surplus, uncapped, plus interest." %}</th>
+            <th class="num">Investments{% info "Fund value at the year end: SIPs plus growth at the blended return." %}</th>
             <th class="num">PF corpus{% info "EPF balance at the year end, including employee and employer contributions plus interest." %}</th>
             <th class="num">Loans left{% info "Principal still outstanding across every loan at the year end." %}</th>
-            <th class="num">Net worth{% info "Bank + pool + investments + PF, minus loans outstanding, at the year end." %}</th>
+            <th class="num">Net worth{% info "Bank + investments + PF, minus loans outstanding, at the year end." %}</th>
           </tr>
         </thead>
         <tbody>
@@ -60,16 +60,15 @@
                 <td class="num">{{ year.insurance|inr }}</td>
                 <td class="num">{{ year.emi|inr }}</td>
                 <td class="num">{{ year.sip|inr }}</td>
+                <td class="num">{{ year.one_time_expense|inr }}</td>
               {% endif %}
               <td class="num">{{ year.outflow|inr }}</td>
               <td class="num {{ year.surplus|net_class }}">{{ year.surplus|inr }}</td>
               <td class="num">{{ year.bank_balance|inr }}</td>
               {% comment %}
                 Balance on top, the growth portion of it underneath -- keeps
-                the split visible without six more columns to scroll past.
+                the split visible without extra columns to scroll past.
               {% endcomment %}
-              <td class="num">{{ year.pool_balance|inr }}
-                {% if year.pool_gains %}<span class="sub-value">+{{ year.pool_gains|inr }} growth</span>{% endif %}</td>
               <td class="num">{{ year.investment_balance|inr }}
                 {% if year.investment_gains %}<span class="sub-value {{ year.investment_gains|net_class }}">{% if year.investment_gains > 0 %}+{% endif %}{{ year.investment_gains|inr }} growth</span>{% endif %}</td>
               <td class="num">{{ year.pf_balance|inr }}
