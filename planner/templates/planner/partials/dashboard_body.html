@@ -52,11 +52,16 @@
     <span class="stat-label">Emergency fund{% info "The first month the bank balance reaches its target. Purely a milestone -- every rupee of surplus keeps accumulating in the bank either way, before and after." %}</span>
     {% if summary.ef_reached_month %}
       <strong class="stat-value positive">{{ summary.ef_reached_month|month_label }}</strong>
-      <span class="stat-foot">Target {{ summary.first.ef_target|inr }} reached</span>
     {% else %}
       <strong class="stat-value warn">Not by {{ horizon.end_year }}</strong>
-      <span class="stat-foot">Target {{ summary.first.ef_target|inr }}</span>
     {% endif %}
+    {% if ef_meter.pct is not None %}
+      <div class="meter on-hl" role="img" aria-label="{{ ef_meter.pct }} percent of the emergency target covered today"><span style="width: {{ ef_meter.pct }}%"></span></div>
+    {% endif %}
+    <span class="stat-foot">
+      Target {{ summary.first.ef_target|inr }}{% if summary.ef_reached_month %} reached{% endif %}
+      {% if ef_meter.pct is not None %}&middot; {{ ef_meter.pct }}% covered today{% if ef_meter.months %}, {{ ef_meter.months }} months of essentials{% endif %}{% endif %}
+    </span>
   </div>
 
   <div class="card stat span-2">
@@ -68,6 +73,48 @@
       {% else %}Still running in {{ horizon.end_year }}{% endif %}
     </span>
   </div>
+
+  {% if insights %}
+    <div class="card span-2 insights-card">
+      <div class="card-head"><div><h2>Worth a look</h2><p class="note">Read from your projection. Rules of thumb, not advice.</p></div></div>
+      <ul class="insight-list">
+        {% for item in insights %}
+          <li class="insight insight-{{ item.level }}">
+            <span class="insight-dot" aria-hidden="true"></span>
+            <div>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.body }}{% if item.link %} <a href="{% url item.link %}">{{ item.link_label }}</a>{% endif %}</p>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if milestones or fi.progress is not None %}
+    <div class="card span-2 milestone-card {% if not insights %}span-4{% endif %}">
+      <div class="card-head"><div><h2>Milestones ahead</h2><p class="note">The first month each one is reached on this plan.</p></div></div>
+      {% if milestones %}
+        <ol class="milestones">
+          {% for item in milestones %}
+            <li class="ms-{{ item.kind }}">
+              <span class="ms-when">{{ item.month|month_label }}</span>
+              <span class="ms-what"><strong>{{ item.label }}</strong>{% if item.hint %}<small>{{ item.hint }}</small>{% endif %}</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="note" style="padding: 0 26px 12px">No milestones fall inside this projection yet.</p>
+      {% endif %}
+      {% if fi.progress is not None %}
+        <div class="fi-line">
+          <span>Financial independence{% info "Funds alone reaching 25 times a year's living costs and insurance -- the usual rule of thumb for a sustainable withdrawal. PF and the bank are left out. A prompt to think, not a promise." %}</span>
+          <div class="meter" role="img" aria-label="{{ fi.progress }} percent of the way"><span style="width: {{ fi.progress }}%"></span></div>
+          <small>{{ fi.progress }}% there today{% if fi.year %} &middot; reached in {{ fi.year }}{% else %} &middot; not within this projection{% endif %}</small>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
 
   <div class="card span-2 mix-card">
     <div class="card-head">
@@ -111,6 +158,28 @@
     <div class="chart-holder"><canvas id="net-worth-chart"></canvas></div>
   </div>
 
+  <div class="card chart-card span-2">
+    <div class="card-head">
+      <div>
+        <h2>Where each year's income goes</h2>
+        <p class="note">
+          {% if savings_rate %}In {{ savings_rate.0 }}, about <strong>{{ savings_rate.1 }}%</strong> of income is saved or invested (what is left over plus SIPs).{% else %}Spending by type, per year.{% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="chart-holder"><canvas id="flow-chart"></canvas></div>
+  </div>
+
+  <div class="card chart-card span-2">
+    <div class="card-head">
+      <div>
+        <h2>Money in versus growth</h2>
+        <p class="note">What you put into funds and PF, and what it has earned on top. Measured from the projection start.</p>
+      </div>
+    </div>
+    <div class="chart-holder"><canvas id="growth-chart"></canvas></div>
+  </div>
+
   <div class="card chart-card {% if upcoming_lumpy %}span-2{% else %}span-4{% endif %}">
     <div class="card-head">
       <div>
@@ -134,6 +203,34 @@
           <li><span class="lumpy-month">{{ item.month|month_label }}</span><span class="lumpy-name">{{ item.name }}</span><span class="lumpy-amount">{{ item.amount|inr }}</span></li>
         {% endfor %}
       </ul>
+    </div>
+  {% endif %}
+
+  {% if heatmap.years %}
+    <div class="card span-4 heat-card">
+      <div class="card-head">
+        <div>
+          <h2>Surplus calendar</h2>
+          <p class="note">Each square is a month: greener means more left over, red means a deficit. A dot marks a lump-sum month.</p>
+        </div>
+        <div class="heat-legend" aria-hidden="true"><span>deficit</span><i class="n3"></i><i class="n1"></i><i class="z"></i><i class="p1"></i><i class="p4"></i><span>surplus</span></div>
+      </div>
+      <div class="heat-scroll">
+        <table class="heat">
+          <thead><tr><th></th>{% for m in heatmap.labels %}<th scope="col">{{ m }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for year in heatmap.years %}
+              <tr>
+                <th scope="row">{{ year.year }}</th>
+                {% for cell in year.cells %}
+                  {% if cell.empty %}<td class="empty"></td>
+                  {% else %}<td class="{{ cell.level }}{% if cell.lumpy %} lump{% endif %}" title="{{ cell.label }}: {{ cell.value|inr }}{% if cell.lumpy %} (lump-sum month){% endif %}"><span class="sr-only">{{ cell.label }} {{ cell.value|inr }}</span></td>{% endif %}
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   {% endif %}
 </div>

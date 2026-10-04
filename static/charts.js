@@ -201,6 +201,54 @@
       });
     }
 
+    const stacked = (canvasId, labels, sets) => {
+      const canvas = destroy(canvasId);
+      if (!canvas) return;
+      new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: sets.map(([label, values, color]) => ({
+            label, data: values, backgroundColor: color, borderWidth: 0, borderRadius: 3, borderSkipped: false,
+          })),
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          scales: (() => {
+            const scales = baseScales(colors);
+            scales.x.stacked = true;
+            scales.y.stacked = true;
+            return scales;
+          })(),
+          plugins: {
+            legend: { position: "top", align: "start",
+              labels: { color: colors.muted, usePointStyle: true, pointStyle: "rect", boxWidth: 10, font: { size: 12 } } },
+            tooltip: tooltip(colors),
+          },
+        },
+      });
+    };
+
+    if (data.living) {
+      stacked("flow-chart", data.labels, [
+        ["Living", data.living, colors.bank],
+        ["Insurance", data.insurance, colors.pf],
+        ["EMIs", data.emi, colors.loans],
+        ["SIPs", data.sip, colors.investments],
+        ["One-time", data.oneTime, colors.muted],
+        ["Left over", data.left, colors.netWorth],
+        ["Overspent", data.over, colors.negative],
+      ]);
+      stacked("growth-chart", data.labels, [
+        ["Put into funds", data.capFunds, colors.investments],
+        ["Fund growth", data.gainFunds, colors.netWorth],
+        ["PF contributions", data.capPf, colors.pf],
+        ["PF interest", data.gainPf, colors.loans],
+      ]);
+    }
+
     const barCanvas = destroy("surplus-chart");
     if (barCanvas) {
       new Chart(barCanvas, {

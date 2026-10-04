@@ -21,6 +21,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .crud import PAGE_TABLES, get_config
+from . import insights
 from .forms import PlannerSettingsForm
 from .metrics import page_metrics
 from .models import Loan, PlannerSettings
@@ -166,6 +167,18 @@ def _chart_payload(years) -> str:
         "loans": [float(y.total_loan_balance) for y in years],
         "netWorth": [float(y.net_worth) for y in years],
         "surplus": [float(y.surplus) for y in years],
+        # Where each year's income went, and what its funds are made of.
+        "living": [float(y.living_expenses) for y in years],
+        "insurance": [float(y.insurance) for y in years],
+        "emi": [float(y.emi) for y in years],
+        "sip": [float(y.sip) for y in years],
+        "oneTime": [float(y.one_time_expense) for y in years],
+        "left": [float(max(y.surplus, 0)) for y in years],
+        "over": [float(min(y.surplus, 0)) for y in years],
+        "capFunds": [float(y.invested_capital) for y in years],
+        "gainFunds": [float(y.investment_gains) for y in years],
+        "capPf": [float(y.pf_capital) for y in years],
+        "gainPf": [float(y.pf_gains) for y in years],
     })
 
 
@@ -228,6 +241,12 @@ def _dashboard_context(request) -> dict:
         ),
         "has_data": bool(rows) and any(r.total_inflow or r.total_outflow for r in rows),
         "upcoming_lumpy": _upcoming_lumpy(rows),
+        "insights": insights.build_insights(rows, years, summary, planner, request.user),
+        "milestones": insights.milestones(rows, summary, years, planner),
+        "fi": insights.financial_independence(years),
+        "ef_meter": insights.emergency_fund_meter(summary.first, planner),
+        "heatmap": insights.heatmap(rows),
+        "savings_rate": insights._savings_rate(years),
     }
 
 
