@@ -1,0 +1,60 @@
+{% extends "planner/base.html" %}
+{% load money %}
+
+{% block title %}What-if{% endblock %}
+
+{% block content %}
+  {% include "planner/partials/plan_subnav.html" %}
+
+  <div class="page-head">
+    <h1>What-if</h1>
+    <p class="subtitle">
+      Change an assumption or throw a shock at the plan and see it against your baseline. Nothing here
+      is saved &mdash; your Settings and data stay exactly as they are.
+    </p>
+  </div>
+
+  <div class="preset-row" aria-label="Quick scenarios">
+    <span class="toolbar-label">Try</span>
+    {% for preset in presets %}<a class="toggle preset" href="{{ preset.href }}">{{ preset.label }}</a>{% endfor %}
+    {% if changed %}<a class="toggle preset reset" href="{% url 'whatif' %}">Reset to baseline</a>{% endif %}
+  </div>
+
+  <form id="whatif-form" class="whatif-layout" method="get" action="{% url 'whatif' %}"
+        hx-get="{% url 'whatif_results' %}" hx-trigger="input delay:350ms, change"
+        hx-target="#whatif-results" hx-swap="innerHTML" hx-indicator="#whatif-busy">
+
+    <div class="whatif-controls">
+      <section class="card">
+        <div class="card-head"><div><h2>Assumptions</h2><p class="note">Drag, or type a value. Sliders at baseline change nothing.</p></div></div>
+        <div class="slider-grid">
+          {% include "planner/partials/slider.html" with name="infl" label="Expense inflation % p.a." min="0" max="25" step="0.5" value=values.infl base=base.infl unit="%" %}
+          {% include "planner/partials/slider.html" with name="hike" label="Salary hike % p.a." min="0" max="40" step="0.5" value=values.hike base=base.hike unit="%" %}
+          {% include "planner/partials/slider.html" with name="ret" label="Investment return % p.a." min="-10" max="40" step="0.5" value=values.ret base=base.ret unit="%" %}
+          {% include "planner/partials/slider.html" with name="bank" label="Bank interest % p.a." min="0" max="15" step="0.25" value=values.bank base=base.bank unit="%" %}
+          {% include "planner/partials/slider.html" with name="step" label="SIP step-up, points added" min="-20" max="20" step="0.5" value=values.step base=base.step unit="" %}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><div><h2>Shocks</h2><p class="note">One-off events laid over the same projection.</p></div></div>
+        <div class="slider-grid">
+          <div class="field-pair">
+            <label class="field"><span class="field-label">No salary from</span><input type="month" name="jl_start" value="{{ values.jl_start }}"></label>
+            <label class="field"><span class="field-label">For (months)</span><input type="number" name="jl_months" min="0" max="60" step="1" value="{{ values.jl_months }}"></label>
+          </div>
+          <div class="field-pair">
+            <label class="field"><span class="field-label">Market falls in</span><input type="month" name="md_month" value="{{ values.md_month }}"></label>
+            <label class="field"><span class="field-label">By (%)</span><input type="number" name="md_pct" min="0" max="90" step="1" value="{{ values.md_pct }}"></label>
+          </div>
+        </div>
+        <p class="note shock-note">A job loss stops salary and bonus for those months; living costs, EMIs and SIPs carry on. A market fall cuts the value of your funds in that month; the money you put in is unchanged.</p>
+      </section>
+      <span id="whatif-busy" class="htmx-indicator">recomputing&hellip;</span>
+    </div>
+
+    <div id="whatif-results" class="whatif-results">
+      {% include "planner/partials/whatif_results.html" %}
+    </div>
+  </form>
+{% endblock %}

@@ -862,6 +862,30 @@ h3 { margin: 0; font-size: 14px; }
 }
 .stat-value, .hero-second strong, .stat-foot, .lumpy-amount, .chart-holder, .data-table td.num { transition: filter 200ms; }
 
+/* -------------------------------------------------------------- what-if */
+
+.preset-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 20px; }
+.preset { text-decoration: none; }
+.preset:hover { text-decoration: none; }
+.preset.reset { border-style: dashed; }
+
+.whatif-layout { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.whatif-controls { position: sticky; top: 12px; }
+.whatif-controls .card { margin-bottom: 16px; }
+.whatif-results .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.whatif-results .metrics .stat-value { font-size: 26px; }
+
+.slider-grid { display: flex; flex-direction: column; gap: 18px; padding: 8px 26px 26px; }
+.slider-base { margin-left: 8px; color: var(--text-muted); font-weight: 500; font-size: 12px; }
+.range-pair { display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 14px; align-items: center; }
+.range-pair input[type="range"] { width: 100%; min-height: 44px; padding: 0; background: transparent; border: 0; accent-color: var(--accent); cursor: pointer; }
+.field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.shock-note { padding: 0 26px 22px; margin-top: -8px; }
+
+.delta-better { color: var(--good-text); font-weight: 700; }
+.delta-worse { color: var(--critical); font-weight: 700; }
+.delta-same { color: var(--text-muted); }
+
 /* ------------------------------------------------------- bottom tab bar */
 
 .tabbar { display: none; }
@@ -874,6 +898,8 @@ h3 { margin: 0; font-size: 14px; }
   .stat.hero { grid-column: 1 / -1; min-height: 240px; }
   .rows-2 { grid-row: auto; }
   .settings-grid { grid-template-columns: 1fr; }
+  .whatif-layout { grid-template-columns: 1fr; }
+  .whatif-controls { position: static; }
   .metrics { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 }
 
@@ -885,7 +911,7 @@ h3 { margin: 0; font-size: 14px; }
   main { padding: 16px 16px 40px; }
   .footer { padding: 0 16px 24px; }
   .bento { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .metrics { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .metrics, .whatif-results .metrics { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .span-2, .span-4 { grid-column: auto; }
   .stat { min-height: 0; padding: 20px; }
   .stat.hero { padding: 24px; min-height: 0; gap: 22px; }

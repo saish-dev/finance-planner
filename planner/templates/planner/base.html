@@ -54,11 +54,17 @@
         </div>
       </details>
       <details class="menu {% if page == 'investments' or page == 'retirement' or page == 'insurance' %}active{% endif %}">
-        <summary>Plan</summary>
+        <summary>Assets</summary>
         <div class="menu-list">
           <a href="{% url 'investments' %}" class="{% if page == 'investments' %}active{% endif %}">Investments</a>
           <a href="{% url 'retirement' %}" class="{% if page == 'retirement' %}active{% endif %}">Retirement</a>
           <a href="{% url 'insurance' %}" class="{% if page == 'insurance' %}active{% endif %}">Insurance</a>
+        </div>
+      </details>
+      <details class="menu {% if page == 'whatif' %}active{% endif %}">
+        <summary>Plan</summary>
+        <div class="menu-list">
+          <a href="{% url 'whatif' %}" class="{% if page == 'whatif' %}active{% endif %}">What-if</a>
         </div>
       </details>
       <a href="{% url 'settings' %}" class="{% if route == 'settings' %}active{% endif %}">Settings</a>
@@ -100,7 +106,7 @@
     <a href="{% url 'expenses' %}" class="{% if page == 'income' or page == 'expenses' or page == 'loans' or route == 'loan_detail' %}active{% endif %}">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M7 15h3"/></svg></span>Money
     </a>
-    <a href="{% url 'investments' %}" class="{% if page == 'investments' or page == 'retirement' or page == 'insurance' %}active{% endif %}">
+    <a href="{% url 'whatif' %}" class="{% if page == 'whatif' %}active{% endif %}">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 7-9"/><path d="M15 5h5v5"/></svg></span>Plan
     </a>
     <a href="{% url 'settings' %}" class="{% if route == 'settings' %}active{% endif %}">

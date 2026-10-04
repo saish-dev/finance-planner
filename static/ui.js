@@ -133,6 +133,21 @@
     });
   }
 
+  /* ------------------------------------------------------- slider + number */
+
+  /* Each slider is paired with a number box: the slider has no name, so the
+     number box is what the form submits. Dragging the slider copies its value
+     across before the form's own input listener fires. */
+  document.addEventListener("input", function (event) {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const pair = target.closest(".range-pair");
+    if (!pair) return;
+    const range = pair.querySelector('input[type="range"]');
+    const number = pair.querySelector('input[type="number"]');
+    if (target === range) number.value = range.value; else range.value = number.value;
+  }, true);
+
   /* ----------------------------------------------------------------- init */
 
   function init() {

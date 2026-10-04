@@ -233,6 +233,69 @@
     }
   };
 
+  /* What-if: the scenario against the baseline. Baseline is a muted dashed
+   * line so the scenario, drawn solid in the accent colour, is what the eye
+   * lands on. A shaded band marks a job-loss stretch on the monthly chart. */
+  let lastWhatIf = null;
+
+  window.renderWhatIfCharts = function (data) {
+    lastWhatIf = data;
+    if (chartsUnavailable()) return;
+    Chart.defaults.font.family = "'Bricolage Grotesque', system-ui, sans-serif";
+    const colors = palette();
+
+    const pair = (canvasId, labels, base, scen, extra) => {
+      const canvas = destroy(canvasId);
+      if (!canvas) return;
+      new Chart(canvas, {
+        type: "line",
+        plugins: extra || [],
+        data: {
+          labels,
+          datasets: [
+            { label: "Baseline", data: base, borderColor: colors.muted, backgroundColor: colors.muted,
+              borderWidth: 2, borderDash: [6, 5], pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+            { label: "What-if", data: scen, borderColor: colors.netWorth, backgroundColor: colors.netWorth,
+              borderWidth: 3, pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          scales: baseScales(colors),
+          plugins: {
+            legend: { position: "top", align: "start",
+              labels: { color: colors.muted, usePointStyle: true, pointStyle: "line", boxWidth: 24, font: { size: 12 } } },
+            tooltip: tooltip(colors),
+          },
+        },
+      });
+    };
+
+    const band = {
+      id: "eventBand",
+      beforeDatasetsDraw(chart) {
+        const span = data.event && data.event.jobLoss;
+        if (!span) return;
+        const x = chart.scales.x;
+        const from = data.months.indexOf(span[0]);
+        const to = data.months.indexOf(span[1]);
+        if (from < 0 || to < 0) return;
+        const { ctx, chartArea } = chart;
+        const left = x.getPixelForValue(from);
+        const right = x.getPixelForValue(to);
+        ctx.save();
+        ctx.fillStyle = colors.negative + "22";
+        ctx.fillRect(left, chartArea.top, Math.max(right - left, 3), chartArea.bottom - chartArea.top);
+        ctx.restore();
+      },
+    };
+
+    pair("whatif-nw-chart", data.years, data.nwBase, data.nwScen);
+    pair("whatif-bank-chart", data.months, data.bankBase, data.bankScen, [band]);
+  };
+
   window.renderLoanChart = function (data) {
     lastLoan = data;
     if (chartsUnavailable()) return;
@@ -275,5 +338,6 @@
   document.addEventListener("planner:theme", function () {
     if (lastPlanner) window.renderPlannerCharts(lastPlanner);
     if (lastLoan) window.renderLoanChart(lastLoan);
+    if (lastWhatIf) window.renderWhatIfCharts(lastWhatIf);
   });
 })();
