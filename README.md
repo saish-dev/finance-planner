@@ -51,7 +51,7 @@ middleware; no schema change.
 |---|---|
 | **Dashboard** | Net worth, emergency fund, loans, asset mix, insights ("worth a look"), milestones and financial-independence progress, spending and growth charts, and a month-by-month surplus calendar. |
 | **Cashflow / Summary** | The projection month by month and year by year. |
-| **Money / Assets** | Income, expenses, loans, investments, retirement and insurance, edited inline. Every page has headline tiles, sortable and filterable tables, **Copy** on each row, and **Undo** after a delete. |
+| **Money / Assets** | Money is what comes in and goes out: income, expenses, loans and insurance. Assets is what you own: investments and retirement. All edited inline. Every page has headline tiles, sortable and filterable tables, **Copy** on each row, and **Undo** after a delete. |
 | **Loan page** | Interest versus principal by year, and a prepayment simulator (interest and time saved). |
 | **Settings** | Assumptions, plus **Backup and restore** of everything as one JSON file. |
 
