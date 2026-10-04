@@ -148,6 +148,118 @@
     if (target === range) number.value = range.value; else range.value = number.value;
   }, true);
 
+  // The dashboard's year slider re-renders the page, which is expensive, so it
+  // fires its request once on release instead of on every step of the drag.
+  document.addEventListener("change", function (event) {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== "range") return;
+    const pair = target.closest(".range-pair[data-fire-change]");
+    if (!pair) return;
+    pair.querySelector('input[type="number"]').dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  /* ---------------------------------------------------------- undo toast */
+
+  /* Deleting a row asks for no confirmation; instead a toast offers Undo for
+     a few seconds. The server fires `row-deleted` and remembers the row. */
+  document.addEventListener("row-deleted", function (event) {
+    const region = document.getElementById("toasts");
+    if (!region || !event.detail) return;
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    const text = document.createElement("span");
+    text.textContent = "Deleted \u201c" + event.detail.name + "\u201d";
+    const undo = document.createElement("button");
+    undo.type = "button";
+    undo.className = "btn";
+    undo.textContent = "Undo";
+    undo.setAttribute("hx-post", "/rows/undo/");
+    undo.setAttribute("hx-target", "#table-" + event.detail.slug);
+    undo.setAttribute("hx-swap", "outerHTML");
+    toast.append(text, undo);
+    region.replaceChildren(toast);
+    htmx.process(toast);
+    const timer = setTimeout(function () { toast.remove(); }, 9000);
+    // Keep the button in the page until the request finishes: the server's
+    // "metrics-changed" event is fired on it and has to bubble up first.
+    undo.addEventListener("click", function () { clearTimeout(timer); undo.disabled = true; });
+    undo.addEventListener("htmx:afterRequest", function () { toast.remove(); });
+  });
+
+  /* ------------------------------------------------- table sort + filter */
+
+  function cellValue(cell) {
+    const text = cell.textContent.trim();
+    const month = Date.parse("1 " + text);
+    if (/^[A-Za-z]{3} \d{4}$/.test(text) && !isNaN(month)) return month;
+    const number = parseFloat(text.replace(/[\u20b9,%\s]/g, "").replace("\u2212", "-"));
+    if (!isNaN(number) && /\d/.test(text) && /^[-\u2212+]?[\u20b9\d]/.test(text)) return number;
+    return text.toLowerCase();
+  }
+
+  function compare(a, b) {
+    if (typeof a === "number" && typeof b === "number") return a - b;
+    return String(a).localeCompare(String(b));
+  }
+
+  function enhanceTables() {
+    document.querySelectorAll(".table-card .data-table").forEach(function (table) {
+      if (table.dataset.enhanced) return;
+      table.dataset.enhanced = "1";
+      const tbody = table.tBodies[0];
+      const headers = Array.from(table.querySelectorAll("thead th"));
+
+      // A "group" is a data row plus the note row that follows it, if any.
+      function groups() {
+        const out = [];
+        Array.from(tbody.rows).forEach(function (row) {
+          if (row.classList.contains("note-row") && out.length) out[out.length - 1].push(row);
+          else if (!row.querySelector("td.empty")) out.push([row]);
+        });
+        return out;
+      }
+
+      headers.forEach(function (th, index) {
+        if (th.classList.contains("actions-col")) return;
+        th.classList.add("sortable");
+        th.setAttribute("tabindex", "0");
+        th.setAttribute("aria-sort", "none");
+        function sort() {
+          const ascending = th.getAttribute("aria-sort") !== "ascending";
+          headers.forEach(function (other) { other.setAttribute("aria-sort", "none"); });
+          th.setAttribute("aria-sort", ascending ? "ascending" : "descending");
+          const sorted = groups().sort(function (x, y) {
+            const result = compare(cellValue(x[0].cells[index]), cellValue(y[0].cells[index]));
+            return ascending ? result : -result;
+          });
+          sorted.forEach(function (group) { group.forEach(function (row) { tbody.appendChild(row); }); });
+        }
+        th.addEventListener("click", sort);
+        th.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); sort(); }
+        });
+      });
+
+      // A filter box once there are enough rows to be worth searching.
+      if (groups().length >= 6) {
+        const head = table.closest(".table-card").querySelector(".card-head");
+        const box = document.createElement("input");
+        box.type = "search";
+        box.className = "table-filter input";
+        box.placeholder = "Filter rows";
+        box.setAttribute("aria-label", "Filter rows");
+        box.addEventListener("input", function () {
+          const needle = box.value.trim().toLowerCase();
+          groups().forEach(function (group) {
+            const show = !needle || group[0].textContent.toLowerCase().includes(needle);
+            group.forEach(function (row) { row.hidden = !show; });
+          });
+        });
+        head.insertBefore(box, head.lastElementChild);
+      }
+    });
+  }
+
   /* ----------------------------------------------------------------- init */
 
   function init() {
@@ -155,6 +267,7 @@
     setupPrivacy();
     setupMenus();
     labelCells();
+    enhanceTables();
     countUp();
   }
 
@@ -164,6 +277,7 @@
   // HTMX swaps whole table cards and the dashboard body.
   document.addEventListener("htmx:afterSwap", function (event) {
     labelCells();
+    enhanceTables();
     countUp(event.target);
   });
 })();

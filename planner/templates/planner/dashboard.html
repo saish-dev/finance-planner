@@ -12,8 +12,13 @@
     </div>
 
     {# The single most-used control in the app: change the year, everything below re-renders. #}
+    <div class="control-row">
+    <button type="button" class="btn no-print" onclick="window.print()">Print or save as PDF</button>
     <label class="year-control">
       <span>Project to year</span>
+      <span class="range-pair year-pair" data-fire-change>
+        <input type="range" min="{{ planner.start_month.year }}" max="{{ planner.max_year }}" step="1"
+               value="{{ current_year }}" aria-label="Project to year, slider" tabindex="-1">
       <input type="number" name="upto" value="{{ current_year }}" min="{{ planner.start_month.year }}"
              max="{{ planner.max_year }}" step="1" class="input year-input"
              hx-get="{% url 'dashboard_partial' %}"
@@ -21,8 +26,10 @@
              hx-swap="innerHTML"
              hx-trigger="change, keyup changed delay:500ms"
              hx-indicator="#year-busy">
+      </span>
       <span id="year-busy" class="htmx-indicator">recomputing&hellip;</span>
     </label>
+    </div>
   </div>
 
   <div id="dashboard-body">

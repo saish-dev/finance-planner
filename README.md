@@ -45,6 +45,22 @@ no login page — **do not expose it on a network**. Every model still carries a
 `user` foreign key, so becoming multi-user means adding a login and deleting the
 middleware; no schema change.
 
+## What is in the app
+
+| Area | What it does |
+|---|---|
+| **Dashboard** | Net worth, emergency fund, loans, asset mix, insights ("worth a look"), milestones and financial-independence progress, spending and growth charts, and a month-by-month surplus calendar. |
+| **Cashflow / Summary** | The projection month by month and year by year. |
+| **Money / Assets** | Income, expenses, loans, investments, retirement and insurance, edited inline. Every page has headline tiles, sortable and filterable tables, **Copy** on each row, and **Undo** after a delete. |
+| **Plan → Goals** | "I need ₹X by month M", checked against bank + funds after the goals due before it, with the extra monthly SIP that would close any gap. |
+| **Plan → What-if** | Change inflation, hikes, returns, interest and SIP step-ups, or add a stretch with no salary or a market fall, and compare with the baseline. Nothing is saved; the scenario lives in the URL. |
+| **Plan → Actuals** | Log real month-end balances and see the drift from the plan. |
+| **Loan page** | Interest versus principal by year, and a prepayment simulator (interest and time saved). |
+| **Settings** | Assumptions, plus **Backup and restore** of everything as one JSON file. |
+
+The top bar has a privacy switch (blurs every figure) and a light/dark switch.
+The dashboard prints cleanly (Print or save as PDF).
+
 ## Where the logic lives
 
 ```
@@ -52,7 +68,18 @@ planner/services/projection.py   the engine: one MonthRow per month
 planner/services/amortization.py NPER, PV, one month of amortisation
 planner/services/dates.py        all month arithmetic (the off-by-one-prone part)
 planner/services/money.py        Decimal helpers; no float ever touches money
+planner/whatif.py                scenario parsing and baseline-vs-scenario comparison
+planner/goals.py                 goals measured against the projection
+planner/actuals.py               logged balances against the plan
+planner/insights.py              insights, milestones, FI progress, surplus heatmap
+planner/prepay.py                loan prepayment what-if
+planner/metrics.py               headline tiles above each data page
+planner/backup.py                JSON export / restore
 ```
+
+`build_projection(user, upto_year, scenario)` accepts an optional in-memory
+`Scenario` of overrides (used by What-if); with none it is the baseline, and
+nothing a scenario does is ever saved.
 
 `build_projection(user, upto_year)` is a pure function of the database: nothing
 is precomputed, cached or stored. That is why deleting a loan or a fund can

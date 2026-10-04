@@ -14,6 +14,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.core import serializers
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -21,7 +22,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .crud import PAGE_TABLES, get_config
-from . import insights, prepay
+from . import backup, insights, prepay
 from .forms import PlannerSettingsForm
 from .metrics import page_metrics
 from .models import Loan, PlannerSettings
@@ -219,6 +220,24 @@ def _asset_mix(first) -> dict:
     return {"items": items, "gradient": f"conic-gradient({', '.join(stops)})", "total": total}
 
 
+def _onboarding(user) -> list[dict]:
+    """The setup checklist, shown while salary or expenses are still missing."""
+    from .models import Expense, Goal, InvestmentHolding, Loan, SalaryChange
+    steps = [
+        {"label": "Add your salary", "hint": "Your monthly in-hand pay -- the starting point for everything.",
+         "url": "income", "required": True, "done": SalaryChange.objects.filter(user=user).exists()},
+        {"label": "Add your expenses", "hint": "Rent, groceries, bills. Yearly and quarterly costs are handled too.",
+         "url": "expenses", "required": True, "done": Expense.objects.filter(user=user).exists()},
+        {"label": "Add any loans", "hint": "EMIs and balances, so debt-free dates and net worth are right.",
+         "url": "loans", "required": False, "done": Loan.objects.filter(user=user).exists()},
+        {"label": "Add investments", "hint": "Funds and SIPs, so growth shows up.",
+         "url": "investments", "required": False, "done": InvestmentHolding.objects.filter(user=user).exists()},
+        {"label": "Set a goal", "hint": "A deposit, a wedding, a degree -- see if the plan reaches it.",
+         "url": "goals", "required": False, "done": Goal.objects.filter(user=user).exists()},
+    ]
+    return steps if not all(step["done"] for step in steps if step["required"]) else []
+
+
 def _dashboard_context(request) -> dict:
     planner = get_planner(request.user)
     upto = requested_year(request)
@@ -241,6 +260,7 @@ def _dashboard_context(request) -> dict:
         ),
         "has_data": bool(rows) and any(r.total_inflow or r.total_outflow for r in rows),
         "upcoming_lumpy": _upcoming_lumpy(rows),
+        "onboarding": _onboarding(request.user),
         "insights": insights.build_insights(rows, years, summary, planner, request.user),
         "milestones": insights.milestones(rows, summary, years, planner),
         "fi": insights.financial_independence(years),
@@ -375,10 +395,82 @@ def row_save(request, slug: str, pk: int | None = None):
 def row_delete(request, slug: str, pk: int):
     planner = get_planner(request.user)
     config = get_config(slug)
-    get_object_or_404(config.model, pk=pk, user=request.user).delete()
+    obj = get_object_or_404(config.model, pk=pk, user=request.user)
+    # Keep the row in the session so the toast's Undo can put it back. Only
+    # the most recent deletion is remembered.
+    # A short human name for the toast: the row's own name or label if it has one.
+    name = getattr(obj, "name", None) or getattr(obj, "label", None) or str(obj)
+    request.session["undo_delete"] = {
+        "slug": slug,
+        "record": serializers.serialize("json", [obj]),
+        "name": name,
+    }
+    obj.delete()
     # Projections are never stored, so a deleted row simply stops appearing in
     # the next recomputation -- there is no history to repair.
+    response = render_table(request, slug, planner)
+    response["HX-Trigger"] = json.dumps({"metrics-changed": True, "row-deleted": {"slug": slug, "name": name}})
+    return response
+
+
+@require_POST
+def row_undo(request):
+    """Put back the row deleted most recently in this session."""
+    saved = request.session.pop("undo_delete", None)
+    if not saved:
+        raise Http404
+    config = get_config(saved["slug"])
+    planner = get_planner(request.user)
+    try:
+        for obj in serializers.deserialize("json", saved["record"]):
+            obj.object.user = request.user
+            if config.model.objects.filter(pk=obj.object.pk).exists():
+                obj.object.pk = None
+            obj.object.save()
+    except Exception:
+        # E.g. a unique month that has since been re-used: say nothing was restored.
+        messages.warning(request, "That row could not be restored.")
+    return _table_changed(request, saved["slug"], planner)
+
+
+@require_POST
+def row_duplicate(request, slug: str, pk: int):
+    config = get_config(slug)
+    if not config.can_duplicate:
+        raise Http404
+    planner = get_planner(request.user)
+    obj = get_object_or_404(config.model, pk=pk, user=request.user)
+    obj.pk = None
+    for field in ("name", "label"):
+        if hasattr(obj, field):
+            setattr(obj, field, f"{getattr(obj, field)} (copy)"[:120])
+            break
+    obj.save()
     return _table_changed(request, slug, planner)
+
+
+@require_http_methods(["GET"])
+def backup_export(request):
+    stamp = dt.date.today().isoformat()
+    response = HttpResponse(backup.export_data(request.user), content_type="application/json")
+    response["Content-Disposition"] = f'attachment; filename="finance-planner-backup-{stamp}.json"'
+    return response
+
+
+@require_POST
+def backup_import(request):
+    upload = request.FILES.get("backup")
+    if upload is None:
+        messages.error(request, "Choose a backup file first.")
+        return redirect("settings")
+    try:
+        counts = backup.restore_data(request.user, upload.read(backup.MAX_BYTES + 1))
+    except backup.BackupError as exc:
+        messages.error(request, str(exc))
+    else:
+        total = sum(counts.values())
+        messages.success(request, f"Backup restored: {total} row{'s' if total != 1 else ''} across {len(counts)} tables.")
+    return redirect("settings")
 
 
 @require_http_methods(["GET"])

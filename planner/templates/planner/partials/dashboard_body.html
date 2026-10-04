@@ -4,7 +4,26 @@
   <div class="banner warning">{{ notice }}</div>
 {% endfor %}
 
-{% if not has_data %}
+{% if onboarding %}
+  <section class="card checklist">
+    <div class="card-head"><div>
+      <h2>Let's set up your plan</h2>
+      <p class="note">Two things are needed before the projection means anything. The rest sharpen it.</p>
+    </div></div>
+    <ol class="checklist-steps">
+      {% for step in onboarding %}
+        <li class="{% if step.done %}done{% endif %}">
+          <span class="check" aria-hidden="true">{% if step.done %}&#10003;{% else %}{{ forloop.counter }}{% endif %}</span>
+          <div>
+            <a href="{% url step.url %}"><strong>{{ step.label }}</strong></a>{% if not step.required %} <span class="pill">optional</span>{% endif %}
+            <p>{{ step.hint }}</p>
+          </div>
+          <span class="sr-only">{% if step.done %}done{% else %}to do{% endif %}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+{% elif not has_data %}
   <div class="banner info">
     Nothing to project yet. Add your salary on the <a href="{% url 'income' %}">Income</a> page,
     then your <a href="{% url 'expenses' %}">expenses</a>, <a href="{% url 'loans' %}">loans</a>

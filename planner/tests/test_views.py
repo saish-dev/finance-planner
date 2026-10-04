@@ -346,7 +346,7 @@ class FirstRunTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["has_data"])
-        self.assertContains(response, "Nothing to project yet")
+        self.assertContains(response, "set up your plan")
         # Settings are created on first visit rather than 500-ing.
         self.assertTrue(PlannerSettings.objects.filter(user=get_owner()).exists())
 
@@ -390,4 +390,49 @@ class PageMetricsTests(TestCase):
     def test_saving_or_deleting_a_row_asks_the_tiles_to_refresh(self):
         expense = Expense.objects.filter(user=self.user).first()
         response = self.client.post(reverse("row_delete", args=["expense", expense.pk]))
-        self.assertEqual(response["HX-Trigger"], "metrics-changed")
+        import json
+        events = json.loads(response["HX-Trigger"])
+        self.assertTrue(events["metrics-changed"])
+        self.assertEqual(events["row-deleted"]["slug"], "expense")
+
+
+class UndoAndDuplicateTests(TestCase):
+    def setUp(self):
+        self.user = get_owner()
+        self.planner = make_planner(self.user, project_to_year=2030)
+        make_salary(self.user, amount="120000")
+        self.expense = make_expense(self.user, name="Rent", amount="30000")
+
+    def test_delete_then_undo_restores_the_row(self):
+        self.client.post(reverse("row_delete", args=["expense", self.expense.pk]))
+        self.assertFalse(Expense.objects.filter(user=self.user, name="Rent").exists())
+        response = self.client.post(reverse("row_undo"))
+        self.assertEqual(response.status_code, 200)
+        restored = Expense.objects.get(user=self.user, name="Rent")
+        self.assertEqual(restored.amount, D("30000"))
+
+    def test_undo_with_nothing_to_undo_is_a_404(self):
+        self.assertEqual(self.client.post(reverse("row_undo")).status_code, 404)
+
+    def test_undo_only_remembers_the_latest_delete(self):
+        other = make_expense(self.user, name="Gym", amount="2000")
+        self.client.post(reverse("row_delete", args=["expense", self.expense.pk]))
+        self.client.post(reverse("row_delete", args=["expense", other.pk]))
+        self.client.post(reverse("row_undo"))
+        self.assertTrue(Expense.objects.filter(name="Gym").exists())
+        self.assertFalse(Expense.objects.filter(name="Rent").exists())
+
+    def test_duplicate_makes_a_labelled_copy(self):
+        self.client.post(reverse("row_duplicate", args=["expense", self.expense.pk]))
+        names = sorted(Expense.objects.filter(user=self.user).values_list("name", flat=True))
+        self.assertEqual(names, ["Rent", "Rent (copy)"])
+
+    def test_check_ins_cannot_be_duplicated(self):
+        from planner.models import ActualBalance
+        actual = ActualBalance.objects.create(user=self.user, month=dt.date(2026, 1, 1), bank_balance=D("1"))
+        response = self.client.post(reverse("row_duplicate", args=["actual", actual.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_onboarding_checklist_goes_away_once_the_basics_exist(self):
+        response = self.client.get(reverse("dashboard"))
+        self.assertTrue(response.context["onboarding"] == [])

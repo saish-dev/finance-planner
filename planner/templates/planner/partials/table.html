@@ -33,11 +33,17 @@
                       hx-get="{% url 'row_edit' config.slug row.obj.pk %}"
                       hx-target="#row-{{ config.slug }}-{{ row.obj.pk }}"
                       hx-swap="outerHTML">Edit</button>
+              {% if config.can_duplicate %}
+              <button class="btn ghost"
+                      hx-post="{% url 'row_duplicate' config.slug row.obj.pk %}"
+                      hx-target="#table-{{ config.slug }}"
+                      hx-swap="outerHTML"
+                      title="Make a copy of this row">Copy</button>
+              {% endif %}
               <button class="btn ghost danger"
                       hx-post="{% url 'row_delete' config.slug row.obj.pk %}"
                       hx-target="#table-{{ config.slug }}"
-                      hx-swap="outerHTML"
-                      hx-confirm="Delete &ldquo;{{ row.obj }}&rdquo;? Projections recompute from scratch, so nothing else breaks.">Delete</button>
+                      hx-swap="outerHTML">Delete</button>
             </td>
           </tr>
           {% if row.warnings %}

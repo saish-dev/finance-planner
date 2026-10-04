@@ -75,4 +75,28 @@
       <a class="btn ghost" href="{% url 'dashboard' %}">Back to dashboard</a>
     </div>
   </form>
+
+  <section class="card backup-card">
+    <div class="card-head">
+      <div>
+        <h2>Backup and restore</h2>
+        <p class="note">
+          Everything you have entered &mdash; settings, income, expenses, loans, funds, goals and
+          check-ins &mdash; in one JSON file. Keep a copy somewhere safe; restoring it brings the
+          whole plan back.
+        </p>
+      </div>
+      <a class="btn primary" href="{% url 'backup_export' %}" download>Download backup</a>
+    </div>
+    <form class="backup-form" method="post" action="{% url 'backup_import' %}" enctype="multipart/form-data"
+          onsubmit="return confirm('Restoring replaces everything currently in the planner with the contents of this file. Continue?');">
+      {% csrf_token %}
+      <label class="field">
+        <span class="field-label">Restore from a backup</span>
+        <input type="file" name="backup" accept="application/json,.json" required>
+        <span class="field-help">This replaces your current data. If the file is not a valid backup, nothing changes.</span>
+      </label>
+      <button class="btn" type="submit">Restore</button>
+    </form>
+  </section>
 {% endblock %}

@@ -33,4 +33,9 @@ urlpatterns = [
     path("rows/<slug:slug>/<int:pk>/edit/", views.row_edit, name="row_edit"),
     path("rows/<slug:slug>/<int:pk>/save/", views.row_save, name="row_update"),
     path("rows/<slug:slug>/<int:pk>/delete/", views.row_delete, name="row_delete"),
+    path("rows/<slug:slug>/<int:pk>/duplicate/", views.row_duplicate, name="row_duplicate"),
+    path("rows/undo/", views.row_undo, name="row_undo"),
+
+    path("backup/export/", views.backup_export, name="backup_export"),
+    path("backup/import/", views.backup_import, name="backup_import"),
 ]

@@ -844,6 +844,48 @@ h3 { margin: 0; font-size: 14px; }
 .banner.error { background: color-mix(in srgb, var(--critical) 10%, var(--surface-1)); border-color: color-mix(in srgb, var(--critical) 45%, transparent); color: var(--text-primary); }
 .banner.info { background: var(--surface-2); }
 
+/* ------------------------------------------------- toasts, backup, checklist */
+
+.toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 80; }
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 10px 10px 20px;
+  border-radius: 999px;
+  background: var(--hero);
+  color: var(--hero-ink);
+  font-weight: 600;
+  box-shadow: 0 16px 40px rgba(15, 26, 20, 0.3);
+  animation: toast-in 180ms ease-out;
+}
+.toast .btn { background: var(--hl); color: var(--hl-ink); border-color: transparent; min-height: 36px; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.backup-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding: 4px 26px 26px; }
+.backup-form .field { flex: 1 1 320px; }
+.backup-form input[type="file"] { padding: 10px 14px; min-height: 44px; }
+.backup-card .card-head { align-items: center; }
+
+.checklist-steps { list-style: none; margin: 0; padding: 8px 26px 26px; display: flex; flex-direction: column; gap: 10px; }
+.checklist-steps li { display: flex; gap: 16px; align-items: flex-start; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.checklist-steps li.done { opacity: 0.6; }
+.checklist-steps li.done strong { text-decoration: line-through; }
+.checklist-steps p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13.5px; }
+.checklist-steps .check { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; background: var(--surface-1); border: 1px solid var(--border-strong); }
+.checklist-steps li.done .check { background: var(--hl); color: var(--hl-ink); border-color: transparent; }
+
+.table-filter { width: 200px; min-height: 40px; margin-left: auto; margin-right: 12px; }
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable:hover { color: var(--text-primary); }
+.data-table th.sortable[aria-sort="ascending"]::after { content: " \2191"; }
+.data-table th.sortable[aria-sort="descending"]::after { content: " \2193"; }
+
+.year-pair { display: inline-grid; grid-template-columns: 140px 70px; gap: 12px; align-items: center; }
+.year-pair input[type="range"] { min-height: 32px; }
+.year-control .range-pair { align-items: center; }
+@media (max-width: 720px) { .year-pair { grid-template-columns: minmax(0, 1fr) 70px; flex: 1; } }
+
 /* -------------------------------------------------------------- privacy */
 
 /* One switch in the top bar blurs every figure -- handy when sharing a
@@ -921,7 +963,7 @@ h3 { margin: 0; font-size: 14px; }
 .prepay-tile small { color: var(--text-secondary); font-size: 13px; }
 .prepay-tile.hl { background: var(--hl); color: var(--hl-ink); }
 .prepay-tile.hl .stat-label, .prepay-tile.hl small { color: var(--hl-ink); }
-.prepay-chart { height: 280px; padding-bottom: 24px; }
+.prepay-chart { height: 300px; padding: 16px 26px 24px; }
 :root[data-privacy="on"] .prepay-tile strong, :root[data-privacy="on"] .prepay-chart { filter: blur(9px); }
 
 /* ---------------------------------------------------------------- goals */
@@ -1077,4 +1119,47 @@ h3 { margin: 0; font-size: 14px; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+}
+
+
+/* ---------------------------------------------------------------- print */
+
+/* "Print or save as PDF" produces a clean, light report whatever theme is on
+   screen: navigation and controls are dropped, tiles keep a hairline border,
+   and nothing is split across pages. */
+@media print {
+  :root:root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --plane: #ffffff;
+    --surface-1: #ffffff;
+    --surface-2: #f3f6f4;
+    --text-primary: #0f1a14;
+    --text-secondary: #3d4a42;
+    --text-muted: #55625a;
+    --border: rgba(15, 26, 20, 0.18);
+    --border-strong: rgba(15, 26, 20, 0.3);
+    --hero: #0f2a20;
+    --hl: #bdf0d4;
+    --hl-ink: #0b3a26;
+    --series-1: #0e7a55;
+    --series-2: #2f6fde;
+    --series-3: #0f2a20;
+    --series-4: #d98a00;
+    --series-5: #8a5cd6;
+    --polarity-negative: #d1432b;
+    --critical: #c23a22;
+    --shadow: none;
+  }
+  html, body { background: #ffffff !important; }
+  body { padding: 0; font-size: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .topbar, .tabbar, .footer, .skip, .toasts, .no-print, .icon-btn, .year-control, .preset-row,
+  .subnav, .btn, .htmx-indicator, .table-filter { display: none !important; }
+  main { padding: 0; max-width: none; }
+  .card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+  .bento { gap: 12px; }
+  .stat.hero { min-height: 0; }
+  .chart-card .chart-holder { height: 260px; }
+  .table-scroll { overflow: visible; max-height: none !important; }
+  .data-table th { position: static; }
+  :root[data-privacy="on"] * { filter: none !important; }
 }

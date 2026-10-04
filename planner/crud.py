@@ -75,6 +75,7 @@ class CrudConfig:
     empty_message: str = ""
     needs_planner: bool = False    # form takes a `planner=` kwarg
     needs_user: bool = False       # form takes a `user=` kwarg
+    can_duplicate: bool = True     # rows may be copied (not where a field must be unique)
     needs_projection: bool = False # derived columns read ctx["projection"] (rows by month)
     order_by: tuple = ()
     row_warnings: Callable | None = None
@@ -473,6 +474,7 @@ CONFIGS["actual"] = CrudConfig(
     plural="Monthly check-ins",
     page="actuals",
     add_label="Log a month",
+    can_duplicate=False,
     needs_user=True,
     needs_projection=True,
     order_by=("-month",),
