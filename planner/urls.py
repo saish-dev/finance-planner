@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_plan
+from . import views
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
@@ -16,15 +16,10 @@ urlpatterns = [
     path("investments/", views.data_page, {"page": "investments"}, name="investments"),
     path("retirement/", views.data_page, {"page": "retirement"}, name="retirement"),
     path("insurance/", views.data_page, {"page": "insurance"}, name="insurance"),
-    path("goals/", views.data_page, {"page": "goals"}, name="goals"),
-    path("actuals/", views.data_page, {"page": "actuals"}, name="actuals"),
-    path("extra/<slug:page>/", views.page_extra_partial, name="page_extra"),
 
     path("cashflow/", views.cashflow, name="cashflow"),
     path("cashflow/export.csv", views.cashflow_csv, name="cashflow_csv"),
     path("summary/", views.summary, name="summary"),
-    path("whatif/", views_plan.whatif_view, name="whatif"),
-    path("whatif/results/", views_plan.whatif_results, name="whatif_results"),
 
     # Inline HTMX row editing, shared by every data table.
     path("rows/<slug:slug>/table/", views.row_table, name="row_table"),

@@ -158,39 +158,6 @@ class MonthRow:
 
 
 @dataclass
-class Scenario:
-    """In-memory what-if overrides for one projection run -- never saved.
-
-    Every field left at its default means "use what is in Settings", so
-    `Scenario()` reproduces the baseline exactly. The two stress events are
-    one-off shocks laid over the same engine: a stretch with no salary, and a
-    single-month market fall applied to the funds.
-    """
-    expense_inflation_pct: Decimal | None = None
-    salary_hike_pct: Decimal | None = None
-    investment_return_pct: Decimal | None = None
-    bank_interest_pct: Decimal | None = None
-    sip_stepup_delta_pct: Decimal = DEC0   # added to every fund's own step-up
-    job_loss_start: dt.date | None = None
-    job_loss_months: int = 0
-    market_drop_month: dt.date | None = None
-    market_drop_pct: Decimal = DEC0
-
-    @property
-    def has_job_loss(self) -> bool:
-        return bool(self.job_loss_start and self.job_loss_months > 0)
-
-    @property
-    def has_market_drop(self) -> bool:
-        return bool(self.market_drop_month and self.market_drop_pct > 0)
-
-    def in_job_loss(self, month: dt.date) -> bool:
-        if not self.has_job_loss:
-            return False
-        return self.job_loss_start <= month < add_months(self.job_loss_start, self.job_loss_months)
-
-
-@dataclass
 class Horizon:
     """The resolved projection window, plus anything the user should be told."""
     start_month: dt.date
@@ -512,7 +479,7 @@ def _base_salary(changes: list[SalaryChange], start: dt.date) -> Decimal:
 # The engine
 # --------------------------------------------------------------------------
 
-def build_projection(user, upto_year: int | None = None, scenario: Scenario | None = None) -> list[MonthRow]:
+def build_projection(user, upto_year: int | None = None) -> list[MonthRow]:
     """One MonthRow per month from the planner's start month to the horizon.
 
     `upto_year` overrides PlannerSettings.project_to_year for this call only
@@ -522,16 +489,6 @@ def build_projection(user, upto_year: int | None = None, scenario: Scenario | No
     planner = PlannerSettings.objects.filter(user=user).first()
     if planner is None:
         return []
-
-    # What-if overrides apply to this in-memory copy of the planner row only;
-    # it is loaded fresh here and never saved, so nothing leaks to the database.
-    scenario = scenario or Scenario()
-    if scenario.expense_inflation_pct is not None:
-        planner.expense_inflation_pct = scenario.expense_inflation_pct
-    if scenario.salary_hike_pct is not None:
-        planner.default_salary_hike_pct = scenario.salary_hike_pct
-    if scenario.bank_interest_pct is not None:
-        planner.bank_interest_pct = scenario.bank_interest_pct
 
     horizon = resolve_horizon(planner, upto_year)
     start = horizon.start_month
@@ -549,15 +506,10 @@ def build_projection(user, upto_year: int | None = None, scenario: Scenario | No
     loan_plans = _loan_plans(Loan.objects.filter(user=user), start)
     holdings = list(InvestmentHolding.objects.filter(user=user))
     sip_plans = _sip_plans(holdings, start)
-    for plan in sip_plans:
-        plan.stepup_pct = plan.stepup_pct + scenario.sip_stepup_delta_pct
     pf_plans = _pf_plans(RetirementAccount.objects.filter(user=user), start, salaries)
 
     bank_rate = monthly_rate(planner.bank_interest_pct)
-    if scenario.investment_return_pct is not None:
-        invest_rate = monthly_rate(scenario.investment_return_pct)
-    else:
-        invest_rate = monthly_rate(blended_return_pct(holdings, Decimal(planner.default_investment_return_pct)))
+    invest_rate = monthly_rate(blended_return_pct(holdings, Decimal(planner.default_investment_return_pct)))
     ef_months = Decimal(planner.ef_target_months or 0)
     ef_fixed = Decimal(planner.ef_target_fixed_amount) if planner.ef_target_fixed_amount is not None else None
     insurance_monthly_equiv = sum((p.monthly_equivalent for p in policies), DEC0)
@@ -580,15 +532,12 @@ def build_projection(user, upto_year: int | None = None, scenario: Scenario | No
 
         # 1. Salary (walked ahead of the loop in _salary_series).
         row.salary = salaries[month]
-        laid_off = scenario.in_job_loss(month)
-        if laid_off:
-            row.salary = ZERO
 
         # 2. Bonus / variable pay. A bonus with an "Ends in" month splits its
         #    annual amount evenly across every month from "Starts in" through
         #    there, repeating every year -- a single payout month is just the
         #    one-month case of the same rule.
-        row.bonus = ZERO if laid_off else q2(sum((plan.amount_for(month) for plan in bonus_plans), DEC0))
+        row.bonus = q2(sum((plan.amount_for(month) for plan in bonus_plans), DEC0))
         row.total_inflow = q2(row.salary + row.bonus)
 
         # 3. Living expenses: inflating ones grow in 12-month steps from the
@@ -736,10 +685,6 @@ def build_projection(user, upto_year: int | None = None, scenario: Scenario | No
         #     topped up from the bank and never sold to cover a shortfall.
         row.investment_growth = q2(investments * invest_rate)
         investments = q2(investments + row.investment_growth + row.sip)
-        if scenario.has_market_drop and month == scenario.market_drop_month:
-            # A one-month fall in fund value; the money put in is untouched,
-            # so the loss shows up as negative gains below.
-            investments = q2(investments * (DEC1 - scenario.market_drop_pct / Decimal("100")))
         row.investment_balance = investments
 
         # Capital in each balance, so the rest of it is growth. Investments

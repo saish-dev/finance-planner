@@ -1,8 +1,0 @@
-{# A range slider paired with a number box. Only the number box has a name; ui.js keeps the two in step. #}
-<label class="field slider">
-  <span class="field-label">{{ label }}<span class="slider-base">baseline {{ base }}{{ unit }}</span></span>
-  <span class="range-pair">
-    <input type="range" min="{{ min }}" max="{{ max }}" step="{{ step }}" value="{{ value }}" aria-label="{{ label }} slider" tabindex="-1">
-    <input type="number" name="{{ name }}" min="{{ min }}" max="{{ max }}" step="{{ step }}" value="{{ value }}">
-  </span>
-</label>

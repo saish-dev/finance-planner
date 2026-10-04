@@ -223,7 +223,6 @@ def build_insights(rows, years, summary, planner, user) -> list[Insight]:
                 WARN, f"You are saving about {pct}% of income",
                 f"In {year}, what is left over plus SIPs comes to {pct}% of what comes in. "
                 f"A common aim is 20% or more.",
-                "whatif", "Try a what-if",
             ))
         elif pct >= 30:
             out.append(Insight(GOOD, f"You are saving about {pct}% of income",

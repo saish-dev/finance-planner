@@ -12,7 +12,7 @@ from django.urls import reverse
 
 from planner import backup
 from planner.middleware import get_owner
-from planner.models import ActualBalance, Expense, Goal, Loan, PlannerSettings, SalaryChange
+from planner.models import Expense, Loan, PlannerSettings, SalaryChange
 
 from .factories import make_expense, make_holding, make_loan, make_planner, make_salary, make_user
 
@@ -27,8 +27,6 @@ class BackupTests(TestCase):
         make_expense(self.user, name="Rent", amount="30000")
         make_loan(self.user, name="Home")
         make_holding(self.user, name="Index fund", current_value=D("250000"))
-        Goal.objects.create(user=self.user, name="Car", target_amount=D("900000"), target_month=dt.date(2028, 5, 1))
-        ActualBalance.objects.create(user=self.user, month=dt.date(2026, 3, 1), bank_balance=D("55000"))
 
     def test_export_is_valid_json_with_every_table(self):
         payload = json.loads(backup.export_data(self.user))
@@ -43,7 +41,7 @@ class BackupTests(TestCase):
 
     def test_round_trip_restores_everything_after_a_wipe(self):
         raw = backup.export_data(self.user).encode()
-        for model in (SalaryChange, Expense, Loan, Goal, ActualBalance):
+        for model in (SalaryChange, Expense, Loan):
             model.objects.filter(user=self.user).delete()
         PlannerSettings.objects.filter(user=self.user).delete()
         counts = backup.restore_data(self.user, raw)
@@ -51,7 +49,6 @@ class BackupTests(TestCase):
         self.assertEqual(Expense.objects.get(user=self.user).name, "Rent")
         self.assertEqual(Loan.objects.get(user=self.user).name, "Home")
         self.assertEqual(PlannerSettings.objects.get(user=self.user).expense_inflation_pct, D("7.50"))
-        self.assertEqual(ActualBalance.objects.get(user=self.user).bank_balance, D("55000.00"))
 
     def test_restore_replaces_rather_than_merges(self):
         raw = backup.export_data(self.user).encode()
@@ -85,7 +82,7 @@ class BackupTests(TestCase):
 
     def test_a_row_filed_under_the_wrong_table_is_refused(self):
         payload = json.loads(backup.export_data(self.user))
-        payload["tables"]["planner.goal"].append(payload["tables"]["planner.expense"][0])
+        payload["tables"]["planner.loan"].append(payload["tables"]["planner.expense"][0])
         with self.assertRaises(backup.BackupError):
             backup.restore_data(self.user, json.dumps(payload).encode())
 

@@ -22,7 +22,7 @@ class ChartWiringTests(SimpleTestCase):
     def test_no_template_calls_a_chart_function_inline(self):
         offenders = []
         for path in TEMPLATES.rglob("*.html"):
-            if re.search(r"render(Planner|Loan|WhatIf|Actual|Prepay)Charts?\(", path.read_text()):
+            if re.search(r"render(Planner|Loan|Prepay)Charts?\(", path.read_text()):
                 offenders.append(path.name)
         self.assertEqual(offenders, [], "charts must be drawn by charts.js after the swap settles")
 

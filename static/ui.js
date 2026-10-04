@@ -136,7 +136,7 @@
   /* ------------------------------------------------------- slider + number */
 
   /* Each slider is paired with a number box: the slider has no name, so the
-     number box is what the form submits. Dragging the slider copies its value
+     number box is what gets submitted. Dragging the slider copies its value
      across before the form's own input listener fires. */
   document.addEventListener("input", function (event) {
     const target = event.target;

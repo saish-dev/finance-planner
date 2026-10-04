@@ -427,12 +427,6 @@ class UndoAndDuplicateTests(TestCase):
         names = sorted(Expense.objects.filter(user=self.user).values_list("name", flat=True))
         self.assertEqual(names, ["Rent", "Rent (copy)"])
 
-    def test_check_ins_cannot_be_duplicated(self):
-        from planner.models import ActualBalance
-        actual = ActualBalance.objects.create(user=self.user, month=dt.date(2026, 1, 1), bank_balance=D("1"))
-        response = self.client.post(reverse("row_duplicate", args=["actual", actual.pk]))
-        self.assertEqual(response.status_code, 404)
-
     def test_onboarding_checklist_goes_away_once_the_basics_exist(self):
         response = self.client.get(reverse("dashboard"))
         self.assertTrue(response.context["onboarding"] == [])

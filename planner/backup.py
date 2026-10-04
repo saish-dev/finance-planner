@@ -17,9 +17,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 
 from .models import (
-    ActualBalance,
     Expense,
-    Goal,
     IncomeExtra,
     InsurancePolicy,
     InvestmentHolding,
@@ -35,7 +33,7 @@ MAX_BYTES = 5 * 1024 * 1024
 
 MODELS = [
     PlannerSettings, SalaryChange, IncomeExtra, Expense, OneTimeExpense, Loan,
-    InvestmentHolding, RetirementAccount, InsurancePolicy, Goal, ActualBalance,
+    InvestmentHolding, RetirementAccount, InsurancePolicy,
 ]
 BY_LABEL = {model._meta.label_lower: model for model in MODELS}
 

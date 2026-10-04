@@ -106,52 +106,6 @@ def _insurance(user, planner):
     ]
 
 
-def _goals(user, planner):
-    from . import goals
-    result = goals.analyse(user, planner)
-    cards = result["cards"]
-    if not cards:
-        return [
-            _tile("Total to fund", ZERO, "Add a goal to see if the plan reaches it"),
-            _tile("On track", "None yet", "", kind="text"),
-            _tile("Extra a month needed", ZERO, "To close every shortfall"),
-        ]
-    off = result["counted"] - result["on_track"]
-    return [
-        _tile("Total to fund", result["total_target"], _plural(len(cards), "goal")),
-        _tile("On track", f"{result['on_track']} of {result['counted']}",
-              "Goals the bank and funds cover by their date" if result["counted"] else "No goal falls inside the projection",
-              kind="text"),
-        _tile("Extra a month needed", result["extra_sip"],
-              f"Extra SIP to close {_plural(off, 'shortfall')}" if off else "Nothing to close, every goal is covered"),
-    ]
-
-
-def _actuals(user, planner):
-    from . import actuals
-    result = actuals.analyse(user, planner)
-    if not result["entries"]:
-        return [
-            _tile("Latest net worth", None, "Log a month-end to start", kind="text"),
-            _tile("Drift vs plan", None, "", kind="text"),
-            _tile("Check-ins", 0, "", kind="text"),
-        ]
-    latest = result["latest"]
-    drift = result["latest_drift"]
-    pct = result["drift_pct"]
-    return [
-        _tile("Latest actual net worth", latest["actual"], format_month_label(latest["entry"].month)),
-        _tile("Drift vs plan", drift if drift is not None else "No plan for that month",
-              (f"{'ahead of' if drift >= 0 else 'behind'} the plan by {abs(pct)}%" if drift is not None and pct is not None else ""),
-              kind="money" if drift is not None else "text"),
-        _tile("Check-ins", len(result["entries"]), "Months logged so far", kind="text"),
-    ]
-
-
-def format_month_label(month):
-    return month.strftime("%b %Y")
-
-
 BUILDERS = {
     "income": _income,
     "expenses": _expenses,
@@ -159,8 +113,6 @@ BUILDERS = {
     "investments": _investments,
     "retirement": _retirement,
     "insurance": _insurance,
-    "goals": _goals,
-    "actuals": _actuals,
 }
 
 
