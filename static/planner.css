@@ -467,12 +467,16 @@ h3 { margin: 0; font-size: 14px; }
   background: var(--hero);
   border-color: transparent;
   color: var(--hero-ink);
-  padding: 32px;
-  min-height: 320px;
 }
 .stat.hero .stat-label, .stat.hero .stat-foot { color: var(--hero-muted); }
-.stat.hero .stat-value { font-size: clamp(44px, 6vw, 68px); letter-spacing: -0.04em; line-height: 1; }
 .stat.hero .stat-value.negative { color: #ffb4a6; }
+
+/* Only the dashboard's big net-worth tile gets the oversized headline. Any
+   other dark tile (loan page, the strips above each data page) is a normal
+   stat card, so a figure like 6,49,817 fits its column. */
+.bento > .stat.hero { padding: 32px; min-height: 320px; }
+.bento > .stat.hero .stat-value { font-size: clamp(44px, 6vw, 68px); letter-spacing: -0.04em; line-height: 1; }
+.stat-value { max-width: 100%; }
 /* In-hero footnote under the main figure. */
 .stat.hero .stat-foot { display: block; margin-top: 10px; }
 .stat.hero .hero-second .stat-foot { margin-top: 0; }
@@ -993,7 +997,7 @@ h3 { margin: 0; font-size: 14px; }
 @media (max-width: 1100px) {
   .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .span-4 { grid-column: 1 / -1; }
-  .stat.hero { grid-column: 1 / -1; min-height: 240px; }
+  .bento > .stat.hero { grid-column: 1 / -1; min-height: 240px; }
   .rows-2 { grid-row: auto; }
   .settings-grid { grid-template-columns: 1fr; }
   .prepay-form, .prepay-tiles { grid-template-columns: 1fr; }
@@ -1011,7 +1015,7 @@ h3 { margin: 0; font-size: 14px; }
   .metrics { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .span-2, .span-4 { grid-column: auto; }
   .stat { min-height: 0; padding: 20px; }
-  .stat.hero { padding: 24px; min-height: 0; gap: 22px; }
+  .bento > .stat.hero { padding: 24px; min-height: 0; gap: 22px; }
   .card-head { padding: 18px 18px 6px; flex-wrap: wrap; }
   .chart-card .chart-holder { height: 280px; padding: 8px 14px 18px; }
   .subnav { display: flex; overflow-x: auto; flex-wrap: nowrap; max-width: 100%; }
@@ -1133,7 +1137,7 @@ h3 { margin: 0; font-size: 14px; }
   main { padding: 0; max-width: none; }
   .card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
   .bento { gap: 12px; }
-  .stat.hero { min-height: 0; }
+  .bento > .stat.hero { min-height: 0; }
   .chart-card .chart-holder { height: 260px; }
   .table-scroll { overflow: visible; max-height: none !important; }
   .data-table th { position: static; }
