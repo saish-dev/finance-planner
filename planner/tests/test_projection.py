@@ -289,12 +289,36 @@ class LoanTests(TestCase):
         rows = build_projection(user)
 
         self.assertEqual(loan.last_emi_month(JAN_2026), dt.date(2026, 6, 1))
-        self.assertEqual(rows[5].loans[0].emi, D("10000.00"))  # June, the last EMI
         self.assertEqual(rows[6].loans[0].emi, D("0.00"))      # July, nothing
-        # The EMIs stop before the loan is repaid, so a residue is left
-        # standing rather than being silently written off.
-        self.assertGreater(rows[6].loans[0].balance, D("0"))
-        self.assertEqual(rows[6].loans[0].balance, rows[11].loans[0].balance)
+        # The entered EMI and the shortened tenure do not clear the balance, so
+        # the last EMI absorbs the rest, as a lender's final instalment does:
+        # bigger than the regular one, and the loan ends at exactly zero.
+        self.assertGreater(rows[5].loans[0].emi, D("10000.00"))
+        self.assertEqual(rows[5].loans[0].balance, D("0.00"))
+        self.assertEqual(rows[6].loans[0].balance, D("0.00"))
+        self.assertEqual(rows[11].loans[0].balance, D("0.00"))
+
+    def test_the_final_emi_clears_whatever_is_left_and_only_in_the_last_month(self):
+        user = make_user()
+        make_planner(user)
+        make_salary(user)
+        make_loan(user, principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
+                  monthly_emi=D("10000"), tenure_months=8)
+        rows = build_projection(user)
+        self.assertEqual([r.loans[0].emi for r in rows[:7]], [D("10000.00")] * 7)
+        self.assertEqual(rows[7].loans[0].emi, D("30000.00"))   # 100,000 - 7 x 10,000
+        self.assertEqual(rows[7].loans[0].balance, D("0.00"))
+        self.assertEqual(sum(r.total_emi for r in rows), D("100000.00"))
+
+    def test_a_loan_that_clears_early_is_not_charged_a_final_balloon(self):
+        user = make_user()
+        make_planner(user)
+        make_salary(user)
+        make_loan(user, principal_outstanding_today=D("25000"), annual_interest_pct=D("0"),
+                  monthly_emi=D("10000"), tenure_months=12)
+        rows = build_projection(user)
+        self.assertEqual([r.loans[0].emi for r in rows[:4]],
+                         [D("10000.00"), D("10000.00"), D("5000.00"), D("0.00")])
 
     def test_opening_balance_is_back_solved_when_principal_is_blank(self):
         user = make_user()

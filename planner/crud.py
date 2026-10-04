@@ -110,14 +110,15 @@ def _loan_months_left(loan, ctx):
 
 
 def _loan_warnings(loan, ctx):
-    from .prepay import residual_after_last_emi
+    from .prepay import final_emi
     warnings = []
-    leftover = residual_after_last_emi(loan, ctx["planner_start"])
-    if leftover:
-        last = loan.last_emi_month(ctx["planner_start"])
+    top_up = final_emi(loan, ctx["planner_start"])
+    if top_up:
+        payment, extra = top_up
         warnings.append(
-            f"The EMI and tenure leave {leftover:,.0f} unpaid after {format_month(last)}. "
-            "Raise the EMI, extend the tenure or end month, or check the outstanding balance."
+            f"The EMI and tenure do not quite clear the balance, so the final EMI in "
+            f"{format_month(loan.last_emi_month(ctx['planner_start']))} is {payment:,.0f} "
+            f"({extra:,.0f} more than usual) to bring it to zero."
         )
     if loan.last_emi_month(ctx["planner_start"]) is None:
         warnings.append(

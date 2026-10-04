@@ -632,12 +632,19 @@ def build_projection(user, upto_year: int | None = None, scenario: Scenario | No
             # even if its stated tenure runs on for another month or two.
             emi = DEC0
             if in_window and balance > 0:
-                # The last EMI is capped at what is actually owed. The sheet
-                # charged a flat EMI here and floored the balance at zero,
-                # which quietly spent money that was never due -- this keeps
-                # the cashflow column and the balance column consistent.
+                # Every EMI is capped at what is actually owed (the sheet
+                # charged a flat EMI and floored the balance at zero, which
+                # quietly spent money that was never due). The *last* EMI goes
+                # the other way too: it is whatever it takes to clear the
+                # loan, as a lender's final instalment is. So if the entered
+                # EMI and tenure do not quite clear the balance, the shortfall
+                # is paid in the last month and the balance ends at zero --
+                # never left standing, unpaid and interest-free, forever.
                 payoff = q2(balance * (DEC1 + plan.rate))
-                emi = min(plan.emi, payoff)
+                if month == plan.last_emi_month:
+                    emi = payoff
+                else:
+                    emi = min(plan.emi, payoff)
                 balance = q2(amortise_one_month(balance, plan.rate, emi))
 
             loan_balances[plan.loan_id] = balance

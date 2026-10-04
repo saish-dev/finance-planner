@@ -220,10 +220,14 @@ half-entered row can't break the projection.)
 
 ### Decisions worth knowing about
 
-- **The final EMI is capped at what is actually owed.** The spreadsheet charged
-  a flat EMI in the payoff month and floored the balance at zero, which spends
-  money that was never due. Here the cashflow column and the balance column
-  agree.
+- **The final EMI is exactly what clears the loan.** Every EMI is capped at what
+  is actually owed (the spreadsheet charged a flat EMI in the payoff month and
+  floored the balance at zero, which spends money that was never due), and the
+  *last* EMI goes the other way too: it is whatever it takes to reach zero, as a
+  lender's final instalment is. If the EMI and tenure you enter do not quite
+  clear the balance you enter, the shortfall is paid in that last month -- the
+  loans page notes the bigger payment -- and the balance is zero from then on,
+  never left standing unpaid and interest-free.
 - **The bank may go negative.** If a month's outflow exceeds the surplus and
   whatever is already in the bank, the balance goes negative and the row is
   flagged (red in the cashflow table, a banner on the dashboard) rather than
@@ -235,9 +239,6 @@ half-entered row can't break the projection.)
   constant, matching the spreadsheet. Re-weighting it monthly would move the
   30-year figure by a few percent and make it uncheckable by hand. Noted in
   `blended_return_pct`.
-- **EMIs stopping before a loan is repaid leaves a visible residue.** If a
-  tenure or an end-month override cuts the EMIs short, the outstanding balance
-  is held rather than written off, and the loans page says so.
 - **Horizons are clamped, never rejected**: a year before the start clamps to the
   start year, a year beyond 30 years clamps to the cap, each with an explanation.
 

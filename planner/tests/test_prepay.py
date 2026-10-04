@@ -69,63 +69,49 @@ class LoanPrepayViewTests(TestCase):
         self.assertEqual(self.client.get(reverse("loan_prepay", args=[other.pk])).status_code, 404)
 
 
-class ResidualTests(TestCase):
-    """An EMI and tenure that cannot clear the entered balance leave money standing."""
+class FinalEmiTests(TestCase):
+    """When the entered EMI and tenure do not clear the balance, the last EMI does."""
 
     def setUp(self):
         self.user = get_owner()
         self.planner = make_planner(self.user, project_to_year=2040)
 
-    def test_a_loan_that_clears_has_no_residual(self):
+    def test_a_loan_that_clears_on_schedule_has_an_ordinary_last_emi(self):
         loan = make_loan(self.user, principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
                          monthly_emi=D("10000"), tenure_months=10)
-        self.assertEqual(prepay.residual_after_last_emi(loan, self.planner.start_month), D("0"))
+        self.assertIsNone(prepay.final_emi(loan, self.planner.start_month))
 
-    def test_a_tenure_that_is_too_short_leaves_the_difference(self):
+    def test_a_tenure_that_is_too_short_makes_the_last_emi_bigger(self):
         loan = make_loan(self.user, principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
                          monthly_emi=D("10000"), tenure_months=8)
-        self.assertEqual(prepay.residual_after_last_emi(loan, self.planner.start_month), D("20000.00"))
+        payment, extra = prepay.final_emi(loan, self.planner.start_month)
+        self.assertEqual(payment, D("30000.00"))
+        self.assertEqual(extra, D("20000.00"))
 
-    def test_it_matches_what_the_projection_leaves_standing(self):
+    def test_it_matches_what_the_projection_charges_in_the_last_month(self):
         from planner.services.projection import build_projection
         loan = make_loan(self.user, principal_outstanding_today=D("100000"), annual_interest_pct=D("12"),
                          monthly_emi=D("8000"), tenure_months=10)
         rows = build_projection(self.user, upto_year=2030)
-        engine = rows[-1].loan_by_id(loan.pk).balance
-        self.assertEqual(prepay.residual_after_last_emi(loan, self.planner.start_month), engine)
+        payment, _ = prepay.final_emi(loan, self.planner.start_month)
+        self.assertEqual(rows[9].loan_by_id(loan.pk).emi, payment)
+        self.assertEqual(rows[9].loan_by_id(loan.pk).balance, D("0.00"))
 
-    def test_dashboard_and_loans_page_both_say_so(self):
+    def test_the_balance_is_zero_for_ever_after_and_no_warning_banner_is_shown(self):
         from .factories import make_expense, make_salary
         make_salary(self.user, amount="100000")
         make_expense(self.user, amount="30000")
         make_loan(self.user, name="Car", principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
                   monthly_emi=D("10000"), tenure_months=8)
-        dash = self.client.get(reverse("dashboard"))
-        self.assertContains(dash, "still owe money after the final EMI")
-        self.assertContains(dash, "Car has")
-        self.assertContains(self.client.get(reverse("loans")), "leave 20,000 unpaid")
+        response = self.client.get(reverse("dashboard"), {"upto": 2035})
+        self.assertEqual(response.context["rows"][-1].total_loan_balance, D("0.00"))
+        self.assertNotContains(response, "still owe money")
+        self.assertEqual(response.context["summary"].debt_free_month, dt.date(2026, 9, 1))
 
-    def test_a_short_horizon_does_not_cry_wolf(self):
-        make_loan(self.user, principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
+    def test_the_loans_page_explains_the_bigger_last_emi(self):
+        make_loan(self.user, name="Car", principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
                   monthly_emi=D("10000"), tenure_months=8)
-        self.planner.project_to_year = 2026
-        self.planner.save()
-        make_loan(self.user, name="Long", principal_outstanding_today=D("1000000"), monthly_emi=D("10000"),
-                  annual_interest_pct=D("0"), tenure_months=100)
-        response = self.client.get(reverse("dashboard"), {"upto": 2026})
-        # Jan-Dec 2026 is 12 months: the 8-month loan's last EMI (Aug 2026) is inside it.
-        names = [item["loan"].name for item in response.context["leftover_loans"]]
-        self.assertIn("Loan", names)
-        self.assertNotIn("Long", names)
-
-    def test_loans_tile_does_not_promise_a_debt_free_date_it_cannot_deliver(self):
-        make_loan(self.user, principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
-                  monthly_emi=D("10000"), tenure_months=8)
-        tiles = self.client.get(reverse("loans")).context["metrics"]
-        self.assertEqual(tiles[2]["label"], "Last EMI")
-        self.assertIn("still owed", tiles[2]["foot"])
-
-    def test_loans_tile_says_debt_free_when_it_really_is(self):
-        make_loan(self.user, principal_outstanding_today=D("100000"), annual_interest_pct=D("0"),
-                  monthly_emi=D("10000"), tenure_months=10)
-        self.assertEqual(self.client.get(reverse("loans")).context["metrics"][2]["label"], "Debt-free after")
+        page = self.client.get(reverse("loans"))
+        self.assertContains(page, "final EMI in Aug 2026 is 30,000")
+        self.assertContains(page, "20,000 more than usual")
+        self.assertEqual(page.context["metrics"][2]["label"], "Debt-free after")

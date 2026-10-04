@@ -40,16 +40,6 @@
   </div>
 {% endif %}
 
-{% if leftover_loans %}
-  <div class="banner warning">
-    <strong>{{ leftover_loans|length }} loan{{ leftover_loans|length|pluralize }} still owe money after the final EMI.</strong>
-    {% for item in leftover_loans %}{{ item.loan.name }} has {{ item.amount|inr }} left after {{ item.last_month|month_label }}{% if not forloop.last %}; {% endif %}{% endfor %}.
-    The EMI and tenure you entered cannot clear the balance you entered, so that amount stays outstanding
-    in every later month. Raise the EMI, extend the tenure, or check the balance on the
-    <a href="{% url 'loans' %}">Loans page</a>.
-  </div>
-{% endif %}
-
 {% comment %}
   Bento grid. Net worth is the dark hero tile -- it also carries the figure at
   the end of the horizon and the split behind it. The emergency fund is the one
@@ -99,7 +89,6 @@
     <span class="stat-foot">
       {% if not summary.has_loans %}No loans
       {% elif summary.debt_free_month %}Debt-free from {{ summary.debt_free_month|month_label }}
-      {% elif leftover_loans %}{{ summary.last.total_loan_balance|inr }} still unpaid after the last EMIs &mdash; see the note above
       {% else %}Still running in {{ horizon.end_year }}{% endif %}
     </span>
   </div>

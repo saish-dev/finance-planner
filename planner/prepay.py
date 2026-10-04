@@ -117,14 +117,14 @@ def compare(loan, planner, params) -> dict:
     }
 
 
-def residual_after_last_emi(loan, planner_start: dt.date) -> Decimal | None:
-    """What is still owed once the loan's last EMI month has passed.
+def final_emi(loan, planner_start: dt.date) -> tuple[Decimal, Decimal] | None:
+    """(the last EMI, how much bigger it is than the regular one), if it is bigger.
 
-    Mirrors the projection (interest first, then the EMI, the final one capped
-    at what is owed). Anything above zero means the EMI and tenure you entered
-    cannot clear the balance you entered -- the projection leaves that amount
-    standing, never paid and never growing, so it is worth flagging.
-    Returns None for a loan with no derivable end date.
+    The projection makes the last EMI whatever it takes to clear the loan. When
+    the EMI and tenure entered do not quite clear the balance entered, that last
+    payment is larger than the regular EMI -- worth telling the user, because it
+    is a bump in that month's cashflow. Returns None when the last EMI is
+    ordinary (or the loan has no derivable end date).
     """
     last = loan.last_emi_month(planner_start)
     if last is None:
@@ -132,8 +132,12 @@ def residual_after_last_emi(loan, planner_start: dt.date) -> Decimal | None:
     balance = q2(loan.opening_balance(planner_start))
     rate, emi = loan.rate_per_month, Decimal(loan.monthly_emi)
     month = loan.seed_month(planner_start)
-    while month <= last and balance > 0:
+    while month < last and balance > 0:
         interest = q2(balance * rate)
         balance = q2(balance + interest - min(emi, balance + interest))
         month = add_months(month, 1)
-    return balance if balance > Decimal("0.50") else ZERO
+    if balance <= 0 or month != last:
+        return None
+    payoff = q2(balance * (Decimal(1) + rate))
+    extra = q2(payoff - emi)
+    return (payoff, extra) if extra > Decimal("0.50") else None

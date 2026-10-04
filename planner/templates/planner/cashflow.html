@@ -73,7 +73,7 @@
             {% if show_spending %}
               <th class="num">Living{% info "Sum of your expenses. Ones marked as inflating grow by the inflation rate every 12 months from the projection start; flat ones never change." %}</th>
               <th class="num">Insurance{% info "The actual premium due this month, never smoothed. A yearly policy shows its full premium once a year and nothing in the other eleven months." %}</th>
-              <th class="num">EMI{% info "Every loan's EMI for this month added together. Per-loan amounts are fixed month to month, so they live on each loan's own schedule page rather than as columns here. The final instalment of a loan is capped at whatever is actually left owing." %}</th>
+              <th class="num">EMI{% info "Every loan's EMI for this month added together. Per-loan amounts are fixed month to month, so they live on each loan's own schedule page rather than as columns here. The final instalment of a loan is whatever clears it, so it can be a little larger than the regular EMI." %}</th>
               <th class="num">SIP{% info "All active SIPs added up. Each one steps up on its own fund's anniversary, not on a common date." %}</th>
               <th class="num">One-time{% info "Any one-time expense due this month -- a single purchase, charged once, in full. Never smoothed and never part of the emergency-fund target." %}</th>
               <th class="num">PF in{% info "Employee plus employer contribution. Shown for information only — it is deliberately NOT part of Out, because your in-hand salary already excludes the employee half and the employer half never reaches your bank." %}</th>
