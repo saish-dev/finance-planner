@@ -12,6 +12,7 @@ urlpatterns = [
     path("loans/", views.data_page, {"page": "loans"}, name="loans"),
     path("metrics/<slug:page>/", views.page_metrics_partial, name="page_metrics"),
     path("loans/<int:pk>/", views.loan_detail, name="loan_detail"),
+    path("loans/<int:pk>/prepay/", views.loan_prepay, name="loan_prepay"),
     path("investments/", views.data_page, {"page": "investments"}, name="investments"),
     path("retirement/", views.data_page, {"page": "retirement"}, name="retirement"),
     path("insurance/", views.data_page, {"page": "insurance"}, name="insurance"),

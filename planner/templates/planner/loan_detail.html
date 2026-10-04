@@ -59,6 +59,25 @@
     <div class="chart-holder"><canvas id="loan-chart"></canvas></div>
   </div>
 
+  <div class="card chart-card">
+    <div class="card-head"><div><h2>Interest versus principal</h2><p class="note">What each year's EMIs go towards. Early years are mostly interest; the balance tips towards principal as the loan ages.</p></div></div>
+    <div class="chart-holder"><canvas id="loan-split-chart"></canvas></div>
+  </div>
+
+  <section class="card prepay-card">
+    <div class="card-head"><div>
+      <h2>What if you paid extra?</h2>
+      <p class="note">Replays this loan from today with the extra money and compares it with the current EMI. It is a what-if only: the cashflow is unchanged until you raise the EMI on the Loans page.</p>
+    </div></div>
+    <form class="prepay-form" hx-get="{% url 'loan_prepay' loan.pk %}" hx-trigger="input delay:350ms, change"
+          hx-target="#prepay-results" hx-swap="innerHTML">
+      <label class="field"><span class="field-label">Extra every month</span><input type="number" name="extra" min="0" step="500" value="{{ prepay.extra|default:'' }}" placeholder="0"></label>
+      <label class="field"><span class="field-label">One-off lump sum</span><input type="number" name="lump" min="0" step="1000" value="{{ prepay.lump|default:'' }}" placeholder="0"></label>
+      <label class="field"><span class="field-label">Lump sum in</span><input type="month" name="lump_month"></label>
+    </form>
+    <div id="prepay-results">{% include "planner/partials/loan_prepay.html" %}</div>
+  </section>
+
   <section class="card">
     <div class="card-head"><h2>Amortisation</h2></div>
     <div class="table-scroll tall">

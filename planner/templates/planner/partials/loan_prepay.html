@@ -1,0 +1,27 @@
+{% load money %}
+{% if prepay.empty %}
+  <p class="note" style="padding: 0 26px 24px">This loan has no outstanding balance to prepay.</p>
+{% elif prepay.never_clears %}
+  <div class="banner warning" style="margin: 0 26px 24px">The EMI does not cover the monthly interest, so this loan never clears and a comparison is not meaningful. Check the EMI and rate.</div>
+{% else %}
+  <div class="prepay-tiles">
+    <div class="prepay-tile hl">
+      <span class="stat-label">Interest saved</span>
+      <strong>{% if prepay.changed %}{{ prepay.interest_saved|inr }}{% else %}&mdash;{% endif %}</strong>
+      <small>{{ prepay.base.interest|inr }} {% if prepay.changed %}&rarr; {{ prepay.new.interest|inr }}{% else %}in total at the current EMI{% endif %}</small>
+    </div>
+    <div class="prepay-tile">
+      <span class="stat-label">Time saved</span>
+      <strong>{% if prepay.changed %}{{ prepay.months_saved }} month{{ prepay.months_saved|pluralize }}{% else %}&mdash;{% endif %}</strong>
+      <small>{{ prepay.base.months }} EMIs {% if prepay.changed %}&rarr; {{ prepay.new.months }}{% else %}to go{% endif %}</small>
+    </div>
+    <div class="prepay-tile">
+      <span class="stat-label">Debt-free</span>
+      <strong>{% if prepay.changed %}{{ prepay.new.last_month|month_label }}{% else %}{{ prepay.base.last_month|month_label }}{% endif %}</strong>
+      <small>{% if prepay.changed %}instead of {{ prepay.base.last_month|month_label }}{% else %}as things stand{% endif %}</small>
+    </div>
+  </div>
+  <div class="chart-holder prepay-chart"><canvas id="prepay-chart"></canvas></div>
+  <script id="prepay-data" type="application/json">{{ prepay.chart|safe }}</script>
+  <script>renderPrepayChart(JSON.parse(document.getElementById('prepay-data').textContent));</script>
+{% endif %}

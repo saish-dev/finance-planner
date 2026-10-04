@@ -380,6 +380,42 @@
     });
   };
 
+  /* Prepayment: balance with the current EMI (dashed) against with extra
+   * payments (solid). Redrawn each time the form changes. */
+  let lastPrepay = null;
+
+  window.renderPrepayChart = function (data) {
+    lastPrepay = data;
+    if (chartsUnavailable()) return;
+    Chart.defaults.font.family = "'Bricolage Grotesque', system-ui, sans-serif";
+    const colors = palette();
+    const canvas = destroy("prepay-chart");
+    if (!canvas) return;
+    new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: data.labels,
+        datasets: [
+          { label: "Current EMI", data: data.base, borderColor: colors.muted, backgroundColor: colors.muted,
+            borderWidth: 2, borderDash: [6, 5], pointRadius: 0, tension: 0.2 },
+          { label: "With extra payments", data: data.new, borderColor: colors.netWorth, backgroundColor: colors.netWorth,
+            borderWidth: 3, pointRadius: 0, tension: 0.2 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: baseScales(colors, { beginAtZero: true }),
+        plugins: {
+          legend: { position: "top", align: "start",
+            labels: { color: colors.muted, usePointStyle: true, pointStyle: "line", boxWidth: 24, font: { size: 12 } } },
+          tooltip: tooltip(colors),
+        },
+      },
+    });
+  };
+
   window.renderLoanChart = function (data) {
     lastLoan = data;
     if (chartsUnavailable()) return;
@@ -424,5 +460,6 @@
     if (lastLoan) window.renderLoanChart(lastLoan);
     if (lastWhatIf) window.renderWhatIfCharts(lastWhatIf);
     if (lastActual) window.renderActualChart(lastActual);
+    if (lastPrepay) window.renderPrepayChart(lastPrepay);
   });
 })();

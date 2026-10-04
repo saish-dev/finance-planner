@@ -912,6 +912,18 @@ h3 { margin: 0; font-size: 14px; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+/* ------------------------------------------------------ loan prepayment */
+
+.prepay-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 8px 26px 18px; }
+.prepay-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 0 26px; }
+.prepay-tile { display: flex; flex-direction: column; gap: 4px; padding: 18px 20px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.prepay-tile strong { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
+.prepay-tile small { color: var(--text-secondary); font-size: 13px; }
+.prepay-tile.hl { background: var(--hl); color: var(--hl-ink); }
+.prepay-tile.hl .stat-label, .prepay-tile.hl small { color: var(--hl-ink); }
+.prepay-chart { height: 280px; padding-bottom: 24px; }
+:root[data-privacy="on"] .prepay-tile strong, :root[data-privacy="on"] .prepay-chart { filter: blur(9px); }
+
 /* ---------------------------------------------------------------- goals */
 
 .goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px; }
@@ -965,6 +977,7 @@ h3 { margin: 0; font-size: 14px; }
   .rows-2 { grid-row: auto; }
   .settings-grid { grid-template-columns: 1fr; }
   .whatif-layout { grid-template-columns: 1fr; }
+  .prepay-form, .prepay-tiles { grid-template-columns: 1fr; }
   .whatif-controls { position: static; }
   .metrics { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 }

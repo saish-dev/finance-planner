@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .crud import PAGE_TABLES, get_config
-from . import insights
+from . import insights, prepay
 from .forms import PlannerSettingsForm
 from .metrics import page_metrics
 from .models import Loan, PlannerSettings
@@ -398,11 +398,21 @@ def loan_detail(request, pk: int):
     rows = build_projection(request.user, upto_year=horizon.end_year)
     schedule = loan_schedule(loan, rows)
 
+    # Interest and principal totalled per calendar year, for the split chart.
+    yearly: dict[int, list[Decimal]] = {}
+    for entry in schedule:
+        bucket = yearly.setdefault(entry["month"].year, [Decimal("0"), Decimal("0")])
+        bucket[0] += entry["interest"]
+        bucket[1] += entry["principal"]
+
     chart = json.dumps({
         "labels": [format_month(entry["month"]) for entry in schedule],
         "balance": [float(entry["closing"]) for entry in schedule],
         "interest": [float(entry["interest"]) for entry in schedule],
         "principal": [float(entry["principal"]) for entry in schedule],
+        "splitYears": [str(year) for year in yearly],
+        "splitInterest": [float(v[0]) for v in yearly.values()],
+        "splitPrincipal": [float(v[1]) for v in yearly.values()],
     })
 
     return render(request, "planner/loan_detail.html", {
@@ -410,6 +420,7 @@ def loan_detail(request, pk: int):
         "horizon": horizon,
         "loan": loan,
         "schedule": schedule,
+        "prepay": prepay.compare(loan, planner, request.GET),
         "chart_data": chart,
         "total_interest": sum((entry["interest"] for entry in schedule), Decimal("0.00")),
         "total_paid": sum((entry["emi"] for entry in schedule), Decimal("0.00")),
@@ -422,6 +433,17 @@ def loan_detail(request, pk: int):
         "opening_balance": loan.opening_balance(planner.start_month),
         "last_emi_month": loan.last_emi_month(planner.start_month),
         "months_remaining": loan.months_remaining_at(planner.start_month),
+    })
+
+
+@require_http_methods(["GET"])
+def loan_prepay(request, pk: int):
+    """The what-if tiles on a loan page, re-fetched as the inputs change."""
+    planner = get_planner(request.user)
+    loan = get_object_or_404(Loan, pk=pk, user=request.user)
+    return render(request, "planner/partials/loan_prepay.html", {
+        "loan": loan,
+        "prepay": prepay.compare(loan, planner, request.GET),
     })
 
 
