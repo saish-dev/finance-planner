@@ -110,7 +110,15 @@ def _loan_months_left(loan, ctx):
 
 
 def _loan_warnings(loan, ctx):
+    from .prepay import residual_after_last_emi
     warnings = []
+    leftover = residual_after_last_emi(loan, ctx["planner_start"])
+    if leftover:
+        last = loan.last_emi_month(ctx["planner_start"])
+        warnings.append(
+            f"The EMI and tenure leave {leftover:,.0f} unpaid after {format_month(last)}. "
+            "Raise the EMI, extend the tenure or end month, or check the outstanding balance."
+        )
     if loan.last_emi_month(ctx["planner_start"]) is None:
         warnings.append(
             "This loan has no derivable end date. Add a tenure or an end month override."

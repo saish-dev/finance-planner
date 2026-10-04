@@ -65,7 +65,17 @@
     return true;
   }
 
+  /* HTMX replaces whole page sections, which removes canvases but leaves their
+   * Chart instances alive (and observing detached nodes). Drop any chart whose
+   * canvas is no longer in the page before drawing new ones. */
+  function pruneCharts() {
+    Object.values(Chart.instances).forEach(function (chart) {
+      if (!chart.canvas || !chart.canvas.isConnected) chart.destroy();
+    });
+  }
+
   function destroy(canvasId) {
+    pruneCharts();
     const canvas = document.getElementById(canvasId);
     if (!canvas) return null;
     const existing = Chart.getChart(canvas);
@@ -421,6 +431,36 @@
     if (chartsUnavailable()) return;
     Chart.defaults.font.family = "'Bricolage Grotesque', system-ui, sans-serif";
     const colors = palette();
+
+    // Interest versus principal, totalled per year.
+    const split = destroy("loan-split-chart");
+    if (split && data.splitYears) {
+      const scales = baseScales(colors);
+      scales.x.stacked = true;
+      scales.y.stacked = true;
+      new Chart(split, {
+        type: "bar",
+        data: {
+          labels: data.splitYears,
+          datasets: [
+            { label: "Principal", data: data.splitPrincipal, backgroundColor: colors.netWorth, borderRadius: 3, borderSkipped: false },
+            { label: "Interest", data: data.splitInterest, backgroundColor: colors.loans, borderRadius: 3, borderSkipped: false },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          scales,
+          plugins: {
+            legend: { position: "top", align: "start",
+              labels: { color: colors.muted, usePointStyle: true, pointStyle: "rect", boxWidth: 10, font: { size: 12 } } },
+            tooltip: tooltip(colors),
+          },
+        },
+      });
+    }
+
     const canvas = destroy("loan-chart");
     if (!canvas) return;
 
@@ -461,5 +501,42 @@
     if (lastWhatIf) window.renderWhatIfCharts(lastWhatIf);
     if (lastActual) window.renderActualChart(lastActual);
     if (lastPrepay) window.renderPrepayChart(lastPrepay);
+  });
+
+  /* ---------------------------------------------------------------- boot */
+
+  /* Pages carry their chart data as <script type="application/json"
+   * data-chart="kind"> and no inline calls. Drawing waits until the page --
+   * or an HTMX swap -- has settled: running a script mid-swap measured the
+   * canvases before they were in their final place, and Chart.js then
+   * restored them to the wrong size. */
+  const renderers = {
+    planner: (data) => window.renderPlannerCharts(data),
+    loan: (data) => window.renderLoanChart(data),
+    whatif: (data) => window.renderWhatIfCharts(data),
+    actual: (data) => window.renderActualChart(data),
+    prepay: (data) => window.renderPrepayChart(data),
+  };
+
+  function drawCharts(scope) {
+    (scope || document).querySelectorAll("script[data-chart]").forEach(function (script) {
+      const render = renderers[script.dataset.chart];
+      if (!render) return;
+      try {
+        render(JSON.parse(script.textContent));
+      } catch (error) {
+        console.error("Could not draw chart", script.dataset.chart, error);
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { drawCharts(document); });
+  } else {
+    drawCharts(document);
+  }
+  document.addEventListener("htmx:afterSettle", function (event) {
+    const target = event.detail && event.detail.elt ? event.detail.elt : event.target;
+    drawCharts(target);
   });
 })();

@@ -238,6 +238,19 @@ def _onboarding(user) -> list[dict]:
     return steps if not all(step["done"] for step in steps if step["required"]) else []
 
 
+def _leftover_loans(user, planner, horizon) -> list[dict]:
+    """Loans whose final EMI has passed inside the horizon with money still owed."""
+    out = []
+    for loan in Loan.objects.filter(user=user):
+        last = loan.last_emi_month(planner.start_month)
+        if last is None or last > horizon.end_month:
+            continue
+        leftover = prepay.residual_after_last_emi(loan, planner.start_month)
+        if leftover:
+            out.append({"loan": loan, "amount": leftover, "last_month": last})
+    return out
+
+
 def _dashboard_context(request) -> dict:
     planner = get_planner(request.user)
     upto = requested_year(request)
@@ -261,6 +274,7 @@ def _dashboard_context(request) -> dict:
         "has_data": bool(rows) and any(r.total_inflow or r.total_outflow for r in rows),
         "upcoming_lumpy": _upcoming_lumpy(rows),
         "onboarding": _onboarding(request.user),
+        "leftover_loans": _leftover_loans(request.user, planner, horizon),
         "insights": insights.build_insights(rows, years, summary, planner, request.user),
         "milestones": insights.milestones(rows, summary, years, planner),
         "fi": insights.financial_independence(years),

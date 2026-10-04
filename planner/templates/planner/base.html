@@ -1,4 +1,4 @@
-{% load static %}<!doctype html>
+{% load static assets %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -22,15 +22,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap">
-  <link rel="stylesheet" href="{% static 'planner.css' %}">
+  <link rel="stylesheet" href="{% asset 'planner.css' %}">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   {% comment %}
-    Not deferred: the page bodies call renderPlannerCharts() from an inline
-    script during parsing, which a deferred file would not have defined yet.
+    Not deferred, so its listeners are in place before the page body is parsed.
+    Pages only carry their chart data as <script data-chart="..."> tags; charts.js
+    draws them once the page, or an HTMX swap, has settled.
   {% endcomment %}
-  <script src="{% static 'charts.js' %}"></script>
-  <script src="{% static 'ui.js' %}" defer></script>
+  <script src="{% asset 'charts.js' %}"></script>
+  <script src="{% asset 'ui.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <a class="skip" href="#main">Skip to content</a>

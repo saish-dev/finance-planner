@@ -535,6 +535,14 @@ h3 { margin: 0; font-size: 14px; }
 
 .chart-card .chart-holder { padding: 12px 26px 24px; height: 360px; }
 
+/* Chart.js sizes a canvas from its container, so the container must be
+   positioned, allowed to shrink, and clip the canvas. Without this a grid
+   tile refuses to get narrower than the canvas it holds, and a wrong first
+   measurement (the page is mid-swap) feeds back into ever-wider layouts. */
+.chart-holder { position: relative; min-width: 0; overflow: hidden; }
+.chart-holder > canvas { max-width: 100%; }
+.bento > *, .whatif-results > *, .whatif-layout > *, .metrics > * { min-width: 0; }
+
 .chart-fallback {
   display: grid;
   place-items: center;

@@ -63,6 +63,5 @@
     <div class="chart-holder"><canvas id="whatif-bank-chart"></canvas></div>
   </div>
 
-  <script id="whatif-data" type="application/json">{{ result.chart_json|safe }}</script>
-  <script>renderWhatIfCharts(JSON.parse(document.getElementById('whatif-data').textContent));</script>
+  <script id="whatif-data" type="application/json" data-chart="whatif">{{ result.chart_json|safe }}</script>
 {% endif %}

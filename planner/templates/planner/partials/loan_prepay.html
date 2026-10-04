@@ -22,6 +22,5 @@
     </div>
   </div>
   <div class="chart-holder prepay-chart"><canvas id="prepay-chart"></canvas></div>
-  <script id="prepay-data" type="application/json">{{ prepay.chart|safe }}</script>
-  <script>renderPrepayChart(JSON.parse(document.getElementById('prepay-data').textContent));</script>
+  <script id="prepay-data" type="application/json" data-chart="prepay">{{ prepay.chart|safe }}</script>
 {% endif %}

@@ -110,6 +110,5 @@
     </div>
   </section>
 
-  <script id="loan-chart-data" type="application/json">{{ chart_data|safe }}</script>
-  <script>renderLoanChart(JSON.parse(document.getElementById('loan-chart-data').textContent));</script>
+  <script id="loan-chart-data" type="application/json" data-chart="loan">{{ chart_data|safe }}</script>
 {% endblock %}

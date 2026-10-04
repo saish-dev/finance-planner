@@ -39,8 +39,7 @@
       <div class="card-head"><div><h2>Plan versus reality</h2><p class="note">The line is the plan; the dots are what you logged.</p></div></div>
       <div class="chart-holder"><canvas id="actual-chart"></canvas></div>
     </div>
-    <script id="actual-data" type="application/json">{{ actuals.chart_json|safe }}</script>
-    <script>renderActualChart(JSON.parse(document.getElementById('actual-data').textContent));</script>
+    <script id="actual-data" type="application/json" data-chart="actual">{{ actuals.chart_json|safe }}</script>
   {% elif not actuals.entries %}
     <div class="banner info">Nothing logged yet. At the end of a month, add your bank and fund balances &mdash; two numbers is enough.</div>
   {% else %}

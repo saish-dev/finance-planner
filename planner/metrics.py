@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from . import prepay
 from .models import (
     Expense,
     IncomeExtra,
@@ -68,12 +69,21 @@ def _loans(user, planner):
     start = planner.start_month
     outstanding = sum((loan.opening_balance(start) for loan in loans), ZERO)
     ends = [end for end in (loan.last_emi_month(start) for loan in loans) if end]
+    # If the EMIs and tenures cannot clear the balances, the last EMI is not
+    # the debt-free date -- say so rather than promise one.
+    leftover = sum((prepay.residual_after_last_emi(loan, start) or ZERO for loan in loans), ZERO)
+    if leftover:
+        last_tile = _tile("Last EMI", max(ends) if ends else None,
+                          f"But {leftover:,.0f} is still owed after the final EMIs -- see the notes under each loan",
+                          kind="month")
+    else:
+        last_tile = _tile("Debt-free after", max(ends) if ends else None,
+                          "The last EMI across every loan" if ends else "No loan has an end date yet",
+                          kind="month")
     return [
         _tile("Outstanding today", outstanding, _plural(len(loans), "loan")),
         _tile("EMIs a month", sum((loan.monthly_emi for loan in loans), ZERO), "All loans together"),
-        _tile("Debt-free after", max(ends) if ends else None,
-              "The last EMI across every loan" if ends else "No loan has an end date yet",
-              kind="month"),
+        last_tile,
     ]
 
 

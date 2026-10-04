@@ -94,6 +94,5 @@
     <div class="chart-holder"><canvas id="surplus-chart"></canvas></div>
   </div>
 
-  <script id="chart-data" type="application/json">{{ chart_data|safe }}</script>
-  <script>renderPlannerCharts(JSON.parse(document.getElementById('chart-data').textContent));</script>
+  <script id="chart-data" type="application/json" data-chart="planner">{{ chart_data|safe }}</script>
 {% endblock %}
