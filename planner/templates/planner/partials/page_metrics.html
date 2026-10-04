@@ -1,0 +1,8 @@
+{% load money %}
+{% for tile in metrics %}
+  <div class="card stat {% if forloop.first %}hero{% elif forloop.counter == 2 %}hl{% endif %}">
+    <span class="stat-label">{{ tile.label }}</span>
+    <strong class="stat-value">{% if tile.kind == "money" %}{{ tile.value|inr }}{% elif tile.kind == "month" %}{{ tile.value|month_label }}{% else %}{{ tile.value }}{% endif %}</strong>
+    <span class="stat-foot">{{ tile.foot }}</span>
+  </div>
+{% endfor %}

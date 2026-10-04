@@ -10,6 +10,7 @@ urlpatterns = [
     path("income/", views.data_page, {"page": "income"}, name="income"),
     path("expenses/", views.data_page, {"page": "expenses"}, name="expenses"),
     path("loans/", views.data_page, {"page": "loans"}, name="loans"),
+    path("metrics/<slug:page>/", views.page_metrics_partial, name="page_metrics"),
     path("loans/<int:pk>/", views.loan_detail, name="loan_detail"),
     path("investments/", views.data_page, {"page": "investments"}, name="investments"),
     path("retirement/", views.data_page, {"page": "retirement"}, name="retirement"),

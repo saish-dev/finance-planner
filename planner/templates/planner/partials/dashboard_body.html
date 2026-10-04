@@ -12,34 +12,43 @@
   </div>
 {% endif %}
 
+{% if summary.shortfall_months %}
+  <div class="banner error">
+    {{ summary.shortfall_months }} month{{ summary.shortfall_months|pluralize }} run out of cash entirely,
+    starting {{ summary.first_shortfall_month|month_label }} &mdash; the bank balance goes negative
+    because that month's outflow is more than the surplus and everything already in the bank. Fund
+    units are never sold to cover it.
+  </div>
+{% endif %}
+
 {% comment %}
-  Four cards. What the other four used to say now lives in the footnote line
-  of whichever card it belongs to.
+  Bento grid. Net worth is the dark hero tile -- it also carries the figure at
+  the end of the horizon and the split behind it. The emergency fund is the one
+  mint highlight tile. What the other four cards used to say now lives in the
+  footnote line of whichever tile it belongs to.
 {% endcomment %}
-<div class="cards">
-  <div class="card stat">
-    <span class="stat-label">Net worth now{% info "Bank + investments + PF corpus, minus every loan's outstanding principal, in the first projected month." %}</span>
-    <strong class="stat-value {{ summary.first.net_worth|net_class }}">{{ summary.first.net_worth|inr }}</strong>
-    <span class="stat-foot">
-      {{ summary.first.month|month_label }} &middot;
-      lowest monthly surplus {{ summary.lowest_surplus|inr_compact }} in {{ summary.lowest_surplus_month|month_label }}
-    </span>
+<div class="bento">
+  <div class="card stat hero rows-2 span-2">
+    <div>
+      <span class="stat-label">Net worth now{% info "Bank + investments + PF corpus, minus every loan's outstanding principal, in the first projected month." %}</span>
+      <strong class="stat-value {{ summary.first.net_worth|net_class }}">{{ summary.first.net_worth|inr }}</strong>
+      <span class="stat-foot">{{ summary.first.month|month_label }}</span>
+    </div>
+    <div class="hero-second">
+      <span class="stat-label">Net worth {{ horizon.end_year }}{% info "The same figure at the end of the horizon, split by balance below. Growth is measured from the projection start, so value you already held counts as money put in." %}</span>
+      <strong class="{{ summary.last.net_worth|net_class }}">{{ summary.last.net_worth|inr }}</strong>
+      <span class="stat-foot">
+        Bank {{ summary.last.bank_balance|inr_compact }} &middot;
+        Funds {{ summary.last.investment_balance|inr_compact }}{% if summary.last.pf_balance %} &middot;
+        PF {{ summary.last.pf_balance|inr_compact }}{% endif %}
+        {% if summary.last.total_capital %}<br>
+          {{ summary.last.total_gains|inr }} of it is growth on {{ summary.last.total_capital|inr }} put in
+        {% endif %}
+      </span>
+    </div>
   </div>
 
-  <div class="card stat">
-    <span class="stat-label">Net worth {{ horizon.end_year }}{% info "The same figure at the end of the horizon, split by balance below. Growth is measured from the projection start, so value you already held counts as money put in." %}</span>
-    <strong class="stat-value {{ summary.last.net_worth|net_class }}">{{ summary.last.net_worth|inr }}</strong>
-    <span class="stat-foot">
-      Bank {{ summary.last.bank_balance|inr_compact }} &middot;
-      Funds {{ summary.last.investment_balance|inr_compact }}{% if summary.last.pf_balance %} &middot;
-      PF {{ summary.last.pf_balance|inr_compact }}{% endif %}
-      {% if summary.last.total_capital %}<br>
-        {{ summary.last.total_gains|inr }} of it is growth on {{ summary.last.total_capital|inr }} put in
-      {% endif %}
-    </span>
-  </div>
-
-  <div class="card stat">
+  <div class="card stat hl span-2">
     <span class="stat-label">Emergency fund{% info "The first month the bank balance reaches its target. Purely a milestone -- every rupee of surplus keeps accumulating in the bank either way, before and after." %}</span>
     {% if summary.ef_reached_month %}
       <strong class="stat-value positive">{{ summary.ef_reached_month|month_label }}</strong>
@@ -50,7 +59,7 @@
     {% endif %}
   </div>
 
-  <div class="card stat">
+  <div class="card stat span-2">
     <span class="stat-label">Loans outstanding{% info "Principal still owed across every loan in the first projected month. Debt-free is the month after the final EMI falls due." %}</span>
     <strong class="stat-value">{{ summary.opening_loan_balance|inr }}</strong>
     <span class="stat-foot">
@@ -59,55 +68,74 @@
       {% else %}Still running in {{ horizon.end_year }}{% endif %}
     </span>
   </div>
-</div>
 
-{% if upcoming_lumpy %}
-  <div class="card lumpy-card">
+  <div class="card span-2 mix-card">
     <div class="card-head">
       <div>
-        <h2>Coming up in the next year</h2>
-        <p class="note">Non-monthly and one-time costs -- charged in full in these months, not smoothed.</p>
+        <h2>What you own, today</h2>
+        <p class="note">Funds, bank and PF as shares of the three together. Loans are not netted off here.</p>
       </div>
     </div>
-    <ul class="lumpy-list">
-      {% for item in upcoming_lumpy %}
-        <li><span class="lumpy-month">{{ item.month|month_label }}</span><span class="lumpy-name">{{ item.name }}</span><span class="lumpy-amount">{{ item.amount|inr }}</span></li>
-      {% endfor %}
-    </ul>
+    {% if asset_mix.items %}
+      <div class="mix">
+        <div class="donut" style="background: {{ asset_mix.gradient }}" role="img"
+             aria-label="{% for item in asset_mix.items %}{{ item.name }} {{ item.pct }} percent{% if not forloop.last %}, {% endif %}{% endfor %}"></div>
+        <ul class="mix-legend">
+          {% for item in asset_mix.items %}
+            <li><span class="swatch" style="background: {{ item.colour }}"></span><span class="mix-name">{{ item.name }}</span><span class="mix-pct">{{ item.pct }}%</span><span class="mix-amount">{{ item.value|inr_compact }}</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% else %}
+      <p class="note" style="padding: 0 26px 26px">Nothing held yet. Add a bank balance in Settings or a fund under Investments.</p>
+    {% endif %}
   </div>
-{% endif %}
 
-{% if summary.shortfall_months %}
-  <div class="banner error">
-    {{ summary.shortfall_months }} month{{ summary.shortfall_months|pluralize }} run out of cash entirely,
-    starting {{ summary.first_shortfall_month|month_label }} &mdash; the bank balance goes negative
-    because that month's outflow is more than the surplus and everything already in the bank. Fund
-    units are never sold to cover it.
+  <div class="card stat span-2">
+    <span class="stat-label">Lowest monthly surplus{% info "The smallest gap between money in and money out in any single projected month. A negative figure means that month spends more than it earns." %}</span>
+    <strong class="stat-value {{ summary.lowest_surplus|net_class }}">{{ summary.lowest_surplus|inr }}</strong>
+    <span class="stat-foot">In {{ summary.lowest_surplus_month|month_label }}, the tightest month in this projection</span>
   </div>
-{% endif %}
 
-<div class="card chart-card">
-  <div class="card-head">
-    <div>
-      <h2>Where your money sits, year by year</h2>
-      <p class="note">
-        One point per year end. Investments are your funds only &mdash; SIPs and growth at a blended
-        {{ blended_return|pct }}. The bank balance is every rupee of net surplus, uncapped, plus
-        interest; the PF corpus is never sold to cover a shortfall.
-      </p>
+  <div class="card chart-card span-4">
+    <div class="card-head">
+      <div>
+        <h2>Where your money sits, year by year</h2>
+        <p class="note">
+          One point per year end. Investments are your funds only &mdash; SIPs and growth at a blended
+          {{ blended_return|pct }}. The bank balance is every rupee of net surplus, uncapped, plus
+          interest; the PF corpus is never sold to cover a shortfall.
+        </p>
+      </div>
     </div>
+    <div class="chart-holder"><canvas id="net-worth-chart"></canvas></div>
   </div>
-  <div class="chart-holder"><canvas id="net-worth-chart"></canvas></div>
-</div>
 
-<div class="card chart-card">
-  <div class="card-head">
-    <div>
-      <h2>Annual net surplus</h2>
-      <p class="note">Income minus living costs, insurance, EMIs and SIPs, totalled per year.</p>
+  <div class="card chart-card {% if upcoming_lumpy %}span-2{% else %}span-4{% endif %}">
+    <div class="card-head">
+      <div>
+        <h2>Annual net surplus</h2>
+        <p class="note">Income minus living costs, insurance, EMIs and SIPs, totalled per year.</p>
+      </div>
     </div>
+    <div class="chart-holder"><canvas id="surplus-chart"></canvas></div>
   </div>
-  <div class="chart-holder"><canvas id="surplus-chart"></canvas></div>
+
+  {% if upcoming_lumpy %}
+    <div class="card lumpy-card span-2">
+      <div class="card-head">
+        <div>
+          <h2>Coming up in the next year</h2>
+          <p class="note">Non-monthly and one-time costs -- charged in full in these months, not smoothed.</p>
+        </div>
+      </div>
+      <ul class="lumpy-list">
+        {% for item in upcoming_lumpy %}
+          <li><span class="lumpy-month">{{ item.month|month_label }}</span><span class="lumpy-name">{{ item.name }}</span><span class="lumpy-amount">{{ item.amount|inr }}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
 </div>
 
 <script id="chart-data" type="application/json">{{ chart_data|safe }}</script>

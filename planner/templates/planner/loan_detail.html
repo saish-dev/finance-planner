@@ -13,20 +13,32 @@
   </div>
 
   <div class="cards">
-    <div class="card stat">
+    <div class="card stat hero">
       <span class="stat-label">Opening balance</span>
       <strong class="stat-value">{{ opening_balance|inr }}</strong>
       <span class="stat-foot">
         {% if loan.principal_outstanding_today is None %}Back-solved from the EMI and tenure{% else %}As you entered it{% endif %}
       </span>
     </div>
-    <div class="card stat">
+    <div class="card stat hl">
       <span class="stat-label">Last EMI</span>
       <strong class="stat-value">{{ last_emi_month|month_label }}</strong>
       <span class="stat-foot">
         {{ months_remaining }} EMI{{ months_remaining|pluralize }} left
         {% if loan.end_month_override %}&middot; end month override in force{% endif %}
       </span>
+    </div>
+    {% if first_emi_principal_pct is not None %}
+    <div class="card stat">
+      <span class="stat-label">First EMI split{% info "How the first EMI in the projection divides. Early on most of it is interest; the principal share grows every month." %}</span>
+      <strong class="stat-value">{{ first_emi_principal_pct }}% principal</strong>
+      <span class="stat-foot">{{ first_emi.principal|inr }} principal, {{ first_emi.interest|inr }} interest</span>
+    </div>
+    {% endif %}
+    <div class="card stat">
+      <span class="stat-label">Started</span>
+      <strong class="stat-value">{{ loan.start_month|month_label }}</strong>
+      <span class="stat-foot">Tracked from {{ planner.start_month|month_label }}</span>
     </div>
     <div class="card stat">
       <span class="stat-label">Interest still to pay</span>

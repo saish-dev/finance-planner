@@ -4,6 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ title|default:"Planner" }}{% endblock %} &middot; Cashflow Planner</title>
+  {% comment %}
+    Runs before first paint so a saved theme or privacy choice never flashes
+    the wrong look. No saved theme means "follow the system", which the CSS
+    handles on its own.
+  {% endcomment %}
+  <script>
+    (function () {
+      try {
+        var root = document.documentElement;
+        var theme = localStorage.getItem("planner-theme");
+        if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
+        if (localStorage.getItem("planner-privacy") === "on") root.setAttribute("data-privacy", "on");
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap">
   <link rel="stylesheet" href="{% static 'planner.css' %}">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -12,30 +30,53 @@
     script during parsing, which a deferred file would not have defined yet.
   {% endcomment %}
   <script src="{% static 'charts.js' %}"></script>
+  <script src="{% static 'ui.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <a class="skip" href="#main">Skip to content</a>
+  {% with route=request.resolver_match.url_name %}
   <header class="topbar">
     <a class="brand" href="{% url 'dashboard' %}">
       <span class="brand-mark">&#8377;</span>
-      <span>Cashflow &amp; Net Worth Planner</span>
+      <span>Cashflow</span>
     </a>
-    <nav>
-      <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">Dashboard</a>
-      <a href="{% url 'cashflow' %}" class="{% if request.resolver_match.url_name == 'cashflow' %}active{% endif %}">Cashflow</a>
-      <a href="{% url 'summary' %}" class="{% if request.resolver_match.url_name == 'summary' %}active{% endif %}">Summary</a>
-      <span class="nav-sep"></span>
-      <a href="{% url 'income' %}" class="{% if page == 'income' %}active{% endif %}">Income</a>
-      <a href="{% url 'expenses' %}" class="{% if page == 'expenses' %}active{% endif %}">Expenses</a>
-      <a href="{% url 'loans' %}" class="{% if page == 'loans' %}active{% endif %}">Loans</a>
-      <a href="{% url 'investments' %}" class="{% if page == 'investments' %}active{% endif %}">Investments</a>
-      <a href="{% url 'retirement' %}" class="{% if page == 'retirement' %}active{% endif %}">Retirement</a>
-      <a href="{% url 'insurance' %}" class="{% if page == 'insurance' %}active{% endif %}">Insurance</a>
-      <span class="nav-sep"></span>
-      <a href="{% url 'settings' %}" class="{% if request.resolver_match.url_name == 'settings' %}active{% endif %}">Settings</a>
+
+    <nav class="nav-pill" aria-label="Main">
+      <a href="{% url 'dashboard' %}" class="{% if route == 'dashboard' %}active{% endif %}">Dashboard</a>
+      <a href="{% url 'cashflow' %}" class="{% if route == 'cashflow' %}active{% endif %}">Cashflow</a>
+      <a href="{% url 'summary' %}" class="{% if route == 'summary' %}active{% endif %}">Summary</a>
+      <details class="menu {% if page == 'income' or page == 'expenses' or page == 'loans' or route == 'loan_detail' %}active{% endif %}">
+        <summary>Money</summary>
+        <div class="menu-list">
+          <a href="{% url 'income' %}" class="{% if page == 'income' %}active{% endif %}">Income</a>
+          <a href="{% url 'expenses' %}" class="{% if page == 'expenses' %}active{% endif %}">Expenses</a>
+          <a href="{% url 'loans' %}" class="{% if page == 'loans' or route == 'loan_detail' %}active{% endif %}">Loans</a>
+        </div>
+      </details>
+      <details class="menu {% if page == 'investments' or page == 'retirement' or page == 'insurance' %}active{% endif %}">
+        <summary>Plan</summary>
+        <div class="menu-list">
+          <a href="{% url 'investments' %}" class="{% if page == 'investments' %}active{% endif %}">Investments</a>
+          <a href="{% url 'retirement' %}" class="{% if page == 'retirement' %}active{% endif %}">Retirement</a>
+          <a href="{% url 'insurance' %}" class="{% if page == 'insurance' %}active{% endif %}">Insurance</a>
+        </div>
+      </details>
+      <a href="{% url 'settings' %}" class="{% if route == 'settings' %}active{% endif %}">Settings</a>
     </nav>
+
+    <div class="top-actions">
+      <button type="button" class="icon-btn" id="privacy-toggle" aria-pressed="false" aria-label="Hide amounts" title="Hide amounts">
+        <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 5.1A10.5 10.5 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6A17 17 0 0 0 2 12s4 7 10 7a10 10 0 0 0 4.4-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="theme-toggle" aria-label="Switch colour theme" title="Switch colour theme">
+        <svg class="when-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
+        <svg class="when-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+    </div>
   </header>
 
-  <main>
+  <main id="main">
     {% if messages %}
       <div class="messages">
         {% for message in messages %}<div class="banner {{ message.tags }}">{{ message }}</div>{% endfor %}
@@ -47,5 +88,25 @@
   <footer class="footer">
     Projections are recomputed from your current data on every page load &mdash; nothing is cached or stored.
   </footer>
+
+  {# Phone navigation: the pill bar above is hidden under 720px. #}
+  <nav class="tabbar" aria-label="Main">
+    <a href="{% url 'dashboard' %}" class="{% if route == 'dashboard' %}active{% endif %}">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg></span>Home
+    </a>
+    <a href="{% url 'cashflow' %}" class="{% if route == 'cashflow' or route == 'summary' %}active{% endif %}">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M8 15l4-5 3 3 5-7"/></svg></span>Cashflow
+    </a>
+    <a href="{% url 'expenses' %}" class="{% if page == 'income' or page == 'expenses' or page == 'loans' or route == 'loan_detail' %}active{% endif %}">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M7 15h3"/></svg></span>Money
+    </a>
+    <a href="{% url 'investments' %}" class="{% if page == 'investments' or page == 'retirement' or page == 'insurance' %}active{% endif %}">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-6 4 3 7-9"/><path d="M15 5h5v5"/></svg></span>Plan
+    </a>
+    <a href="{% url 'settings' %}" class="{% if route == 'settings' %}active{% endif %}">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></span>Settings
+    </a>
+  </nav>
+  {% endwith %}
 </body>
 </html>

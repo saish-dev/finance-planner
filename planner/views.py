@@ -14,7 +14,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -22,6 +22,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from .crud import PAGE_TABLES, get_config
 from .forms import PlannerSettingsForm
+from .metrics import page_metrics
 from .models import Loan, PlannerSettings
 from .services.dates import format_month
 from .services.projection import (
@@ -114,6 +115,13 @@ def render_table(request, slug: str, planner) -> HttpResponse:
     return render(request, "planner/partials/table.html", build_table(request, slug, planner))
 
 
+def _table_changed(request, slug: str, planner) -> HttpResponse:
+    """Table re-render after a save or delete, telling the tiles above to refresh."""
+    response = render_table(request, slug, planner)
+    response["HX-Trigger"] = "metrics-changed"
+    return response
+
+
 def _form_for(config, request, planner, instance=None, data=None):
     kwargs = {"instance": instance}
     if config.needs_planner:
@@ -168,19 +176,45 @@ def _upcoming_lumpy(rows, count=12) -> list[dict]:
     return upcoming
 
 
+def _asset_mix(first) -> dict:
+    """Where the money sits in the first projected month, as shares of the assets.
+
+    Only positive balances take a slice (an overdrawn bank has no share of
+    anything), and loans are left out -- this is what you own, not net worth.
+    """
+    parts = [
+        ("Funds", first.investment_balance, "var(--series-2)"),
+        ("Bank", first.bank_balance, "var(--series-3)"),
+        ("PF", first.pf_balance, "var(--series-5)"),
+    ]
+    parts = [(name, Decimal(value), colour) for name, value, colour in parts if value and value > 0]
+    total = sum((value for _, value, _ in parts), Decimal("0"))
+    if not total:
+        return {"items": [], "gradient": "", "total": total}
+    items, stops, cursor = [], [], Decimal("0")
+    for name, value, colour in parts:
+        share = value / total * 100
+        stops.append(f"{colour} {cursor:.2f}% {cursor + share:.2f}%")
+        cursor += share
+        items.append({"name": name, "value": value, "pct": round(share), "colour": colour})
+    return {"items": items, "gradient": f"conic-gradient({', '.join(stops)})", "total": total}
+
+
 def _dashboard_context(request) -> dict:
     planner = get_planner(request.user)
     upto = requested_year(request)
     horizon = resolve_horizon(planner, upto)
     rows = build_projection(request.user, upto_year=horizon.end_year)
     years = annual_rollup(rows)
+    summary = summarise(rows)
 
     return {
         "planner": planner,
         "horizon": horizon,
         "rows": rows,
         "years": years,
-        "summary": summarise(rows),
+        "summary": summary,
+        "asset_mix": _asset_mix(summary.first) if rows else {"items": [], "gradient": "", "total": 0},
         "chart_data": _chart_payload(years),
         "current_year": horizon.end_year,
         "blended_return": blended_return_pct(
@@ -236,6 +270,19 @@ def data_page(request, page: str):
         "title": PAGE_TITLES[page],
         "tables": tables,
         "planner": planner,
+        "metrics": page_metrics(page, request.user, planner),
+    })
+
+
+@require_http_methods(["GET"])
+def page_metrics_partial(request, page: str):
+    """The tiles above a data page, re-fetched after a row is saved or deleted."""
+    if page not in PAGE_TABLES:
+        raise Http404
+    planner = get_planner(request.user)
+    return render(request, "planner/partials/page_metrics.html", {
+        "page": page,
+        "metrics": page_metrics(page, request.user, planner),
     })
 
 
@@ -273,7 +320,7 @@ def row_save(request, slug: str, pk: int | None = None):
     obj.save()
     # Success replaces the whole table, so the derived columns (last EMI
     # month, back-solved opening balance, cover window) refresh with it.
-    return render_table(request, slug, planner)
+    return _table_changed(request, slug, planner)
 
 
 @require_POST
@@ -283,7 +330,7 @@ def row_delete(request, slug: str, pk: int):
     get_object_or_404(config.model, pk=pk, user=request.user).delete()
     # Projections are never stored, so a deleted row simply stops appearing in
     # the next recomputation -- there is no history to repair.
-    return render_table(request, slug, planner)
+    return _table_changed(request, slug, planner)
 
 
 @require_http_methods(["GET"])
@@ -319,6 +366,11 @@ def loan_detail(request, pk: int):
         "total_interest": sum((entry["interest"] for entry in schedule), Decimal("0.00")),
         "total_paid": sum((entry["emi"] for entry in schedule), Decimal("0.00")),
         "residual": schedule[-1]["closing"] if schedule else Decimal("0.00"),
+        "first_emi": schedule[0] if schedule else None,
+        "first_emi_principal_pct": (
+            round(schedule[0]["principal"] / schedule[0]["emi"] * 100)
+            if schedule and schedule[0]["emi"] else None
+        ),
         "opening_balance": loan.opening_balance(planner.start_month),
         "last_emi_month": loan.last_emi_month(planner.start_month),
         "months_remaining": loan.months_remaining_at(planner.start_month),

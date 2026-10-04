@@ -16,6 +16,7 @@
       <div class="banner error">{% for error in form.non_field_errors %}{{ error }}{% endfor %}</div>
     {% endif %}
 
+    <div class="settings-grid">
     <fieldset>
       <legend>Horizon</legend>
       <div class="form-grid">
@@ -48,7 +49,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="wide hero-tile">
       <legend>Bank and emergency fund</legend>
       <div class="form-grid">
         {% for field in form %}{% if field.name in "bank_balance_today,bank_interest_pct,ef_target_months,ef_target_fixed_amount" %}
@@ -67,6 +68,7 @@
         going negative; fund units are never sold to cover it.
       </p>
     </fieldset>
+    </div>
 
     <div class="form-actions">
       <button class="btn primary" type="submit">Save settings</button>

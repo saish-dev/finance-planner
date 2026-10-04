@@ -354,3 +354,40 @@ class FirstRunTests(TestCase):
         for name in ["income", "expenses", "loans", "investments", "insurance"]:
             with self.subTest(page=name):
                 self.assertEqual(self.client.get(reverse(name)).status_code, 200)
+
+
+class PageMetricsTests(TestCase):
+    """The tiles above each data page, and their refresh after a row changes."""
+
+    def setUp(self):
+        self.user = get_owner()
+        self.planner = make_planner(self.user, project_to_year=2030)
+        make_salary(self.user, amount="120000")
+        make_expense(self.user, name="Rent", amount="30000")
+        make_expense(self.user, name="Insurance", amount="12000", frequency="yearly")
+
+    def test_every_data_page_shows_three_tiles(self):
+        for page in ("income", "expenses", "loans", "investments", "retirement", "insurance"):
+            response = self.client.get(reverse(page))
+            self.assertEqual(len(response.context["metrics"]), 3, page)
+            self.assertContains(response, 'id="page-metrics"')
+
+    def test_expense_tiles_add_up(self):
+        tiles = self.client.get(reverse("expenses")).context["metrics"]
+        self.assertEqual(tiles[0]["value"], D("372000"))  # 30,000 x 12 + 12,000 once
+        self.assertEqual(tiles[1]["value"], D("31000"))
+
+    def test_income_tile_uses_the_current_salary(self):
+        tiles = self.client.get(reverse("income")).context["metrics"]
+        self.assertEqual(tiles[0]["value"], D("120000"))
+        self.assertEqual(tiles[2]["value"], D("1440000"))
+
+    def test_partial_renders_and_unknown_page_404s(self):
+        response = self.client.get(reverse("page_metrics", args=["expenses"]))
+        self.assertContains(response, "Living cost a year")
+        self.assertEqual(self.client.get("/metrics/nope/").status_code, 404)
+
+    def test_saving_or_deleting_a_row_asks_the_tiles_to_refresh(self):
+        expense = Expense.objects.filter(user=self.user).first()
+        response = self.client.post(reverse("row_delete", args=["expense", expense.pk]))
+        self.assertEqual(response["HX-Trigger"], "metrics-changed")

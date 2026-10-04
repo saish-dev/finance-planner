@@ -18,18 +18,18 @@
 
   function palette() {
     return {
-      netWorth: cssVar("--series-1", "#2a78d6"),
-      investments: cssVar("--series-2", "#eb6834"),
-      bank: cssVar("--series-3", "#1baf7a"),
-      loans: cssVar("--series-4", "#eda100"),
-      pf: cssVar("--series-5", "#e87ba4"),
-      positive: cssVar("--series-1", "#2a78d6"),
-      negative: cssVar("--polarity-negative", "#e34948"),
-      grid: cssVar("--grid", "#e1e0d9"),
-      axis: cssVar("--axis", "#c3c2b7"),
-      muted: cssVar("--text-muted", "#898781"),
-      ink: cssVar("--text-primary", "#0b0b0b"),
-      surface: cssVar("--surface-1", "#fcfcfb"),
+      netWorth: cssVar("--series-1", "#0e7a55"),
+      investments: cssVar("--series-2", "#2f6fde"),
+      bank: cssVar("--series-3", "#0f2a20"),
+      loans: cssVar("--series-4", "#d98a00"),
+      pf: cssVar("--series-5", "#8a5cd6"),
+      positive: cssVar("--series-1", "#0e7a55"),
+      negative: cssVar("--polarity-negative", "#d1432b"),
+      grid: cssVar("--grid", "#e3e9e4"),
+      axis: cssVar("--axis", "#c4cdc6"),
+      muted: cssVar("--text-muted", "#5f6e65"),
+      ink: cssVar("--hero", "#0f2a20"),
+      surface: cssVar("--surface-1", "#ffffff"),
     };
   }
 
@@ -82,7 +82,7 @@
       const { ctx } = chart;
       const colors = palette();
       ctx.save();
-      ctx.font = "600 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+      ctx.font = "600 11px 'Bricolage Grotesque', system-ui, sans-serif";
       ctx.textBaseline = "middle";
       chart.data.datasets.forEach((dataset, index) => {
         const meta = chart.getDatasetMeta(index);
@@ -95,6 +95,19 @@
       ctx.restore();
     },
   };
+
+  /* A soft vertical fade under the net-worth line. A function, not a fixed
+   * colour, so it is sized to the chart once Chart.js knows the plot area. */
+  function areaFill(canvas, color) {
+    return function (context) {
+      const area = context.chart.chartArea;
+      if (!area) return "transparent";
+      const gradient = context.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+      gradient.addColorStop(0, color + "40");
+      gradient.addColorStop(1, color + "00");
+      return gradient;
+    };
+  }
 
   function baseScales(colors, opts) {
     return {
@@ -120,10 +133,10 @@
   function tooltip(colors) {
     return {
       backgroundColor: colors.ink,
-      titleColor: colors.surface,
-      bodyColor: colors.surface,
-      padding: 10,
-      cornerRadius: 6,
+      titleColor: "#ffffff",
+      bodyColor: "#ffffff",
+      padding: 12,
+      cornerRadius: 12,
       displayColors: true,
       usePointStyle: true,
       callbacks: {
@@ -132,18 +145,24 @@
     };
   }
 
+  let lastPlanner = null;
+  let lastLoan = null;
+
   window.renderPlannerCharts = function (data) {
+    lastPlanner = data;
     if (chartsUnavailable()) return;
+    Chart.defaults.font.family = "'Bricolage Grotesque', system-ui, sans-serif";
     const colors = palette();
 
     const lineCanvas = destroy("net-worth-chart");
     if (lineCanvas) {
-      const line = (label, values, color) => ({
+      const line = (label, values, color, fill) => ({
         label,
         data: values,
         borderColor: color,
-        backgroundColor: color,
-        borderWidth: 2,
+        backgroundColor: fill ? areaFill(lineCanvas, color) : color,
+        fill: !!fill,
+        borderWidth: fill ? 3 : 2,
         tension: 0.25,
         pointRadius: 0,
         pointHoverRadius: 4,
@@ -157,7 +176,7 @@
         data: {
           labels: data.labels,
           datasets: [
-            line("Net worth", data.netWorth, colors.netWorth),
+            line("Net worth", data.netWorth, colors.netWorth, true),
             line("Investments", data.investments, colors.investments),
             line("Bank", data.bank, colors.bank),
             line("Loans left", data.loans, colors.loans),
@@ -194,7 +213,7 @@
             // A single series carrying polarity: the diverging blue/red pair,
             // not four categorical hues.
             backgroundColor: data.surplus.map((v) => (v < 0 ? colors.negative : colors.positive)),
-            borderRadius: 4,
+            borderRadius: 8,
             borderSkipped: false,
             barPercentage: 0.82,
             categoryPercentage: 0.86,
@@ -215,7 +234,9 @@
   };
 
   window.renderLoanChart = function (data) {
+    lastLoan = data;
     if (chartsUnavailable()) return;
+    Chart.defaults.font.family = "'Bricolage Grotesque', system-ui, sans-serif";
     const colors = palette();
     const canvas = destroy("loan-chart");
     if (!canvas) return;
@@ -249,4 +270,10 @@
       },
     });
   };
+
+  // The theme switch changes the CSS variables the colours come from.
+  document.addEventListener("planner:theme", function () {
+    if (lastPlanner) window.renderPlannerCharts(lastPlanner);
+    if (lastLoan) window.renderLoanChart(lastLoan);
+  });
 })();
