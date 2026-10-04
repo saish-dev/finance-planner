@@ -15,6 +15,9 @@ urlpatterns = [
     path("investments/", views.data_page, {"page": "investments"}, name="investments"),
     path("retirement/", views.data_page, {"page": "retirement"}, name="retirement"),
     path("insurance/", views.data_page, {"page": "insurance"}, name="insurance"),
+    path("goals/", views.data_page, {"page": "goals"}, name="goals"),
+    path("actuals/", views.data_page, {"page": "actuals"}, name="actuals"),
+    path("extra/<slug:page>/", views.page_extra_partial, name="page_extra"),
 
     path("cashflow/", views.cashflow, name="cashflow"),
     path("cashflow/export.csv", views.cashflow_csv, name="cashflow_csv"),

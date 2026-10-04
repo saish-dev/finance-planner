@@ -41,6 +41,8 @@ PAGE_TITLES = {
     "investments": "Investments",
     "retirement": "Retirement",
     "insurance": "Insurance",
+    "goals": "Goals",
+    "actuals": "Actuals",
 }
 
 
@@ -81,6 +83,8 @@ def build_table(request, slug: str, planner) -> dict:
     """Everything partials/table.html needs for one editable table."""
     config = get_config(slug)
     ctx = _crud_context(planner)
+    if config.needs_projection:
+        ctx["projection"] = {row.month: row for row in build_projection(request.user)}
     queryset = config.model.objects.filter(user=request.user)
     if config.order_by:
         queryset = queryset.order_by(*config.order_by)
@@ -126,6 +130,8 @@ def _form_for(config, request, planner, instance=None, data=None):
     kwargs = {"instance": instance}
     if config.needs_planner:
         kwargs["planner"] = planner
+    if config.needs_user:
+        kwargs["user"] = request.user
     return config.form_class(data, **kwargs) if data is not None else config.form_class(**kwargs)
 
 
@@ -265,13 +271,36 @@ def settings_view(request):
 def data_page(request, page: str):
     planner = get_planner(request.user)
     tables = [build_table(request, slug, planner) for slug in PAGE_TABLES[page]]
-    return render(request, "planner/data_page.html", {
+    context = {
         "page": page,
         "title": PAGE_TITLES[page],
         "tables": tables,
         "planner": planner,
         "metrics": page_metrics(page, request.user, planner),
-    })
+    }
+    if page == "goals":
+        from . import goals
+        context["goals"] = goals.analyse(request.user, planner)
+    elif page == "actuals":
+        from . import actuals
+        context["actuals"] = actuals.analyse(request.user, planner)
+    return render(request, "planner/data_page.html", context)
+
+
+@require_http_methods(["GET"])
+def page_extra_partial(request, page: str):
+    """Goal cards / actuals chart, re-fetched alongside the tiles."""
+    if page not in ("goals", "actuals"):
+        raise Http404
+    planner = get_planner(request.user)
+    context = {"page": page}
+    if page == "goals":
+        from . import goals
+        context["goals"] = goals.analyse(request.user, planner)
+    else:
+        from . import actuals
+        context["actuals"] = actuals.analyse(request.user, planner)
+    return render(request, "planner/partials/page_extra.html", context)
 
 
 @require_http_methods(["GET"])

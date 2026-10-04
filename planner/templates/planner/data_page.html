@@ -3,6 +3,9 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
+  {% if page == 'goals' or page == 'actuals' %}
+    {% include "planner/partials/plan_subnav.html" %}
+  {% else %}
   <nav class="subnav" aria-label="Data pages">
     <a href="{% url 'income' %}" class="{% if page == 'income' %}active{% endif %}">Income</a>
     <a href="{% url 'expenses' %}" class="{% if page == 'expenses' %}active{% endif %}">Expenses</a>
@@ -11,12 +14,19 @@
     <a href="{% url 'retirement' %}" class="{% if page == 'retirement' %}active{% endif %}">Retirement</a>
     <a href="{% url 'insurance' %}" class="{% if page == 'insurance' %}active{% endif %}">Insurance</a>
   </nav>
+  {% endif %}
 
   <div class="page-head">
     <h1>{{ title }}</h1>
     <p class="subtitle">
-      Everything here feeds the projection from
-      {{ planner.start_month|date:"M Y" }} onwards. Changes show up immediately on the dashboard.
+      {% if page == 'goals' %}
+        What you need to pay for, and when &mdash; checked against what the bank and your funds are projected to hold.
+      {% elif page == 'actuals' %}
+        Log what your accounts really held at month end and see how far the plan has drifted.
+      {% else %}
+        Everything here feeds the projection from
+        {{ planner.start_month|date:"M Y" }} onwards. Changes show up immediately on the dashboard.
+      {% endif %}
     </p>
   </div>
 
@@ -27,6 +37,13 @@
        hx-swap="innerHTML">
     {% include "planner/partials/page_metrics.html" %}
   </div>
+
+  {% if page == 'goals' or page == 'actuals' %}
+    {# Cards or chart that sit under the tiles; they refetch with them. #}
+    <div id="page-extra" hx-get="{% url 'page_extra' page %}" hx-trigger="metrics-changed from:body" hx-swap="innerHTML">
+      {% include "planner/partials/page_extra.html" %}
+    </div>
+  {% endif %}
 
   {% for table in tables %}
     {% include "planner/partials/table.html" with config=table.config rows=table.rows %}

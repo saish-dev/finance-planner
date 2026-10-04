@@ -2,6 +2,7 @@
   {% if cell.kind == 'money' %}{{ cell.value|inr }}
   {% elif cell.kind == 'pct' %}{{ cell.value|pct }}
   {% elif cell.kind == 'month' %}{{ cell.value|month_label }}
+  {% elif cell.kind == 'drift' %}{% if cell.value is None %}&mdash;{% else %}<span class="{{ cell.value|net_class }}">{% if cell.value > 0 %}+{% endif %}{{ cell.value|inr }}</span>{% endif %}
   {% elif cell.kind == 'bool' %}{% if cell.value %}<span class="pill yes">Yes</span>{% else %}<span class="pill no">No</span>{% endif %}
   {% else %}{{ cell.value|default_if_none:"&mdash;" }}{% endif %}
 </td>

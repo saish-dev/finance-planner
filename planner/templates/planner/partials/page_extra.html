@@ -1,0 +1,49 @@
+{% load money %}
+{% if page == 'goals' %}
+  {% if goals.cards %}
+    <div class="goal-grid">
+      {% for card in goals.cards %}
+        <article class="card goal goal-{{ card.status }}">
+          <header class="goal-head">
+            <h3>{{ card.goal.name }}</h3>
+            <span class="pill {% if card.status == 'on' %}yes{% endif %}">
+              {% if card.status == 'on' %}On track{% elif card.status == 'short' %}Short{% elif card.status == 'past' %}Date passed{% else %}Beyond projection{% endif %}
+            </span>
+          </header>
+          <div class="goal-amount"><strong>{{ card.target|inr }}</strong><span>by {{ card.month|month_label }}</span></div>
+          {% if card.status == 'on' or card.status == 'short' %}
+            <div class="meter" role="img" aria-label="{{ card.pct }} percent funded"><span style="width: {{ card.pct }}%"></span></div>
+            <p class="goal-line">
+              {% if card.status == 'on' %}
+                Projected <strong>{{ card.projected|inr }}</strong> available then &mdash; covered.
+              {% else %}
+                Projected <strong>{{ card.projected|inr }}</strong>, short by <strong class="negative">{{ card.shortfall|inr }}</strong>.
+                About <strong>{{ card.extra_sip|inr }}</strong> more a month in SIPs would close it.
+              {% endif %}
+            </p>
+            {% if card.earlier %}<p class="note">After setting aside {{ card.earlier|inr }} for earlier goals.</p>{% endif %}
+          {% elif card.status == 'past' %}
+            <p class="goal-line">This date is before the projection starts, so it is not measured.</p>
+          {% else %}
+            <p class="goal-line">The projection stops before this date. Settings caps it at 30 years.</p>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="banner info">No goals yet. Add one below &mdash; a house deposit, a wedding, a child's education.</div>
+  {% endif %}
+{% elif page == 'actuals' %}
+  {% if actuals.chart_json %}
+    <div class="card chart-card">
+      <div class="card-head"><div><h2>Plan versus reality</h2><p class="note">The line is the plan; the dots are what you logged.</p></div></div>
+      <div class="chart-holder"><canvas id="actual-chart"></canvas></div>
+    </div>
+    <script id="actual-data" type="application/json">{{ actuals.chart_json|safe }}</script>
+    <script>renderActualChart(JSON.parse(document.getElementById('actual-data').textContent));</script>
+  {% elif not actuals.entries %}
+    <div class="banner info">Nothing logged yet. At the end of a month, add your bank and fund balances &mdash; two numbers is enough.</div>
+  {% else %}
+    <div class="banner info">Log at least two different months to see the chart.</div>
+  {% endif %}
+{% endif %}

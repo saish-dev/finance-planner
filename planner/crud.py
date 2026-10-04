@@ -14,7 +14,9 @@ from decimal import Decimal
 from typing import Callable
 
 from .forms import (
+    ActualBalanceForm,
     ExpenseForm,
+    GoalForm,
     IncomeExtraForm,
     InsurancePolicyForm,
     InvestmentHoldingForm,
@@ -24,7 +26,9 @@ from .forms import (
     SalaryChangeForm,
 )
 from .models import (
+    ActualBalance,
     Expense,
+    Goal,
     IncomeExtra,
     InsurancePolicy,
     InvestmentHolding,
@@ -70,6 +74,8 @@ class CrudConfig:
     add_label: str = ""
     empty_message: str = ""
     needs_planner: bool = False    # form takes a `planner=` kwarg
+    needs_user: bool = False       # form takes a `user=` kwarg
+    needs_projection: bool = False # derived columns read ctx["projection"] (rows by month)
     order_by: tuple = ()
     row_warnings: Callable | None = None
     detail_url_name: str = ""
@@ -411,6 +417,83 @@ CONFIGS: dict[str, CrudConfig] = {
 }
 
 
+# --------------------------------------------------------------------------
+# Actuals: what the accounts really held, beside what the plan said they would.
+# --------------------------------------------------------------------------
+
+def _actual_net_worth(actual, ctx):
+    planned = ctx["projection"].get(actual.month)
+    pf = actual.pf_balance if actual.pf_balance is not None else (planned.pf_balance if planned else 0)
+    loans = (
+        actual.loans_outstanding if actual.loans_outstanding is not None
+        else (planned.total_loan_balance if planned else 0)
+    )
+    return actual.bank_balance + actual.investment_balance + pf - loans
+
+
+def _planned_net_worth(actual, ctx):
+    planned = ctx["projection"].get(actual.month)
+    return planned.net_worth if planned else None
+
+
+def _actual_drift(actual, ctx):
+    planned = _planned_net_worth(actual, ctx)
+    return None if planned is None else _actual_net_worth(actual, ctx) - planned
+
+
+def _actual_warnings(actual, ctx):
+    if actual.month not in ctx["projection"]:
+        return ["This month is outside the projection, so there is no plan to compare it with."]
+    return []
+
+
+CONFIGS["goal"] = CrudConfig(
+    slug="goal",
+    model=Goal,
+    form_class=GoalForm,
+    singular="Goal",
+    plural="Goals",
+    page="goals",
+    order_by=("target_month", "name"),
+    note="Something you need to pay for by a given month. Goals are measured against the projection "
+         "-- nothing is deducted from your cashflow when one falls due.",
+    columns=[
+        Column("Goal", TEXT, lambda o, c: o.name),
+        Column("Target", MONEY, lambda o, c: o.target_amount),
+        Column("Needed by", MONTH, lambda o, c: o.target_month),
+        Column("Note", TEXT, lambda o, c: o.note),
+    ],
+)
+
+CONFIGS["actual"] = CrudConfig(
+    slug="actual",
+    model=ActualBalance,
+    form_class=ActualBalanceForm,
+    singular="Check-in",
+    plural="Monthly check-ins",
+    page="actuals",
+    add_label="Log a month",
+    needs_user=True,
+    needs_projection=True,
+    order_by=("-month",),
+    row_warnings=_actual_warnings,
+    note="What your accounts really held at the end of a month. Only the bank and fund balances are "
+         "needed; PF and loans use the projected figures when left blank. Drift is actual net worth "
+         "minus what the plan said.",
+    columns=[
+        Column("Month", MONTH, lambda o, c: o.month),
+        Column("Bank", MONEY, lambda o, c: o.bank_balance),
+        Column("Investments", MONEY, lambda o, c: o.investment_balance),
+        Column("Actual net worth", MONEY, _actual_net_worth, derived=True,
+               info="Bank + investments + PF, minus loans. PF and loans use the plan's figures if you left them blank."),
+        Column("Planned", MONEY, _planned_net_worth, derived=True,
+               info="Net worth the projection gave for that month."),
+        Column("Drift", "drift", _actual_drift, derived=True,
+               info="Actual minus planned. Positive means you are ahead of the plan."),
+    ],
+)
+
+
 PAGE_TABLES: dict[str, list[str]] = {
     "income": ["salary", "bonus"],
     "expenses": ["expense", "onetime"],
@@ -418,6 +501,8 @@ PAGE_TABLES: dict[str, list[str]] = {
     "investments": ["investment"],
     "retirement": ["retirement"],
     "insurance": ["insurance"],
+    "goals": ["goal"],
+    "actuals": ["actual"],
 }
 
 

@@ -296,6 +296,42 @@
     pair("whatif-bank-chart", data.months, data.bankBase, data.bankScen, [band]);
   };
 
+  /* Plan versus reality: the projected net worth as a line, logged actuals as
+   * solid dots on it (spanGaps keeps the dots connected by a faint line). */
+  let lastActual = null;
+
+  window.renderActualChart = function (data) {
+    lastActual = data;
+    if (chartsUnavailable()) return;
+    Chart.defaults.font.family = "'Bricolage Grotesque', system-ui, sans-serif";
+    const colors = palette();
+    const canvas = destroy("actual-chart");
+    if (!canvas) return;
+    new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: data.labels,
+        datasets: [
+          { label: "Plan", data: data.planned, borderColor: colors.muted, backgroundColor: colors.muted,
+            borderWidth: 2, borderDash: [6, 5], pointRadius: 0, tension: 0.2 },
+          { label: "Actual", data: data.actual, borderColor: colors.netWorth, backgroundColor: colors.netWorth,
+            borderWidth: 2, pointRadius: 5, pointHoverRadius: 7, spanGaps: true, tension: 0.2 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: baseScales(colors),
+        plugins: {
+          legend: { position: "top", align: "start",
+            labels: { color: colors.muted, usePointStyle: true, boxWidth: 10, font: { size: 12 } } },
+          tooltip: tooltip(colors),
+        },
+      },
+    });
+  };
+
   window.renderLoanChart = function (data) {
     lastLoan = data;
     if (chartsUnavailable()) return;
@@ -339,5 +375,6 @@
     if (lastPlanner) window.renderPlannerCharts(lastPlanner);
     if (lastLoan) window.renderLoanChart(lastLoan);
     if (lastWhatIf) window.renderWhatIfCharts(lastWhatIf);
+    if (lastActual) window.renderActualChart(lastActual);
   });
 })();

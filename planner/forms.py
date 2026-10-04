@@ -15,7 +15,9 @@ import datetime as dt
 from django import forms
 
 from .models import (
+    ActualBalance,
     Expense,
+    Goal,
     IncomeExtra,
     InsurancePolicy,
     InvestmentHolding,
@@ -300,3 +302,32 @@ class ProjectToYearForm(forms.Form):
         label="Project to year", min_value=1900, max_value=2200, required=False,
         widget=forms.NumberInput(attrs={"class": "input year-input", "step": "1"}),
     )
+
+
+class GoalForm(StyledForm):
+    target_month = MonthField(label="Needed by")
+
+    class Meta:
+        model = Goal
+        fields = ["name", "target_amount", "target_month", "note"]
+
+
+class ActualBalanceForm(StyledForm):
+    month = MonthField(label="Month")
+
+    class Meta:
+        model = ActualBalance
+        fields = ["month", "bank_balance", "investment_balance", "pf_balance", "loans_outstanding", "note"]
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+
+    def clean_month(self):
+        month = self.cleaned_data["month"].replace(day=1)
+        clash = ActualBalance.objects.filter(user=self.user, month=month) if self.user else ActualBalance.objects.none()
+        if self.instance.pk:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise forms.ValidationError("You have already logged this month -- edit that entry instead.")
+        return month
